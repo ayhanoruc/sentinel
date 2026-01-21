@@ -212,7 +212,7 @@ your-project/
 
 ## Background
 
-Sentinel was created based on lessons learned from extensive AI-assisted development across trading ML pipelines, robotics systems, and mobile applications. It addresses the critical pitfalls identified in ["The Double-Edged Sword: AI Coding Agents in ML System Development"](https://chimeralabs.ai/blog/ai-coding-agents-double-edged-sword).
+Sentinel was created based on lessons learned from extensive AI-assisted development across trading ML pipelines, robotics systems, and mobile applications. It addresses the critical pitfalls identified in ["The Double-Edged Sword: AI Coding Agents in ML System Development"](https://chimeralabs.tech/blog/ai-coding-agents-double-edged-sword).
 
 ## License
 
