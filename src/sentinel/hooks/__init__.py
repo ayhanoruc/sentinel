@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import sys
 from typing import NoReturn
 
@@ -22,8 +23,7 @@ def main() -> NoReturn:
         sentinel-hook user-prompt
         sentinel-hook post-edit
     """
-    import select
-    import platform
+    import select  # Unix-only, but import is safe on Windows
 
     if len(sys.argv) < 2:
         print(json.dumps({"error": "Missing hook type argument"}), file=sys.stderr)
@@ -44,7 +44,10 @@ def main() -> NoReturn:
             # Unix: use select to check for available input
             if select.select([sys.stdin], [], [], 0.1)[0]:
                 input_data = json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except (json.JSONDecodeError, OSError, ValueError):
+        # JSONDecodeError: malformed JSON input
+        # OSError: stdin read errors
+        # ValueError: other JSON-related issues
         input_data = {}
 
     # Dispatch to appropriate handler

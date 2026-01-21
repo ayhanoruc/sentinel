@@ -164,10 +164,11 @@ class RulesLoader:
                 for rule in rules:
                     # Filter by tags if specified
                     if tags:
-                        if not rule.tags or not any(t in tags for t in rule.tags):
-                            # Only include if rule has no tags (general) or matches
-                            if rule.tags:
-                                continue
+                        # Include rule if: no tags (general rule) OR has matching tag
+                        is_general_rule = not rule.tags
+                        has_matching_tag = rule.tags and any(t in tags for t in rule.tags)
+                        if not (is_general_rule or has_matching_tag):
+                            continue
 
                     # Check for duplicates (by text)
                     existing_texts = [r.text for r in all_categories[category]]

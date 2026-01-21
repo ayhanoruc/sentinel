@@ -75,7 +75,7 @@ def init_command(args: list[str]) -> int:
         try:
             settings = json.loads(settings_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            pass
+            print(f"  Warning: {settings_file} contains invalid JSON, will be overwritten")
 
     # Add Sentinel hooks
     settings["hooks"] = {
@@ -111,7 +111,7 @@ def init_command(args: list[str]) -> int:
         try:
             mcp_config = json.loads(mcp_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            pass
+            print(f"  Warning: {mcp_file} contains invalid JSON, will be overwritten")
 
     if "mcpServers" not in mcp_config:
         mcp_config["mcpServers"] = {}
@@ -179,7 +179,7 @@ def status_command(args: list[str]) -> int:
             settings = json.loads(settings_file.read_text(encoding="utf-8"))
             hooks_configured = "hooks" in settings
         except json.JSONDecodeError:
-            pass
+            print(f"  Warning: {settings_file} contains invalid JSON")
 
     print()
     print("Hooks:")
@@ -193,7 +193,7 @@ def status_command(args: list[str]) -> int:
             mcp_config = json.loads(mcp_file.read_text(encoding="utf-8"))
             mcp_configured = "sentinel" in mcp_config.get("mcpServers", {})
         except json.JSONDecodeError:
-            pass
+            print(f"  Warning: {mcp_file} contains invalid JSON")
 
     print()
     print("MCP Server:")
@@ -237,7 +237,7 @@ After initialization, the following slash commands are available in Claude Code:
   /rules show          Display active rules
   /rules add           Add a session rule
 
-For more information, see: https://github.com/chimera-labs/sentinel
+For more information, see: https://github.com/ayhanoruc/sentinel
 """)
     return 0
 

@@ -21,8 +21,6 @@ classifiers = [
 
 dependencies = [
     "mcp>=1.0.0",
-    "pydantic>=2.0.0",
-    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -38,9 +36,9 @@ sentinel-server = "sentinel.server:main"
 sentinel-hook = "sentinel.hooks:main"
 
 [project.urls]
-Homepage = "https://github.com/chimera-labs/sentinel"
-Documentation = "https://github.com/chimera-labs/sentinel#readme"
-Repository = "https://github.com/chimera-labs/sentinel"
+Homepage = "https://github.com/ayhanoruc/sentinel"
+Documentation = "https://github.com/ayhanoruc/sentinel#readme"
+Repository = "https://github.com/ayhanoruc/sentinel"
 
 [build-system]
 requires = ["hatchling"]
