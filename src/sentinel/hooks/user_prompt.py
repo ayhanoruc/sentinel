@@ -54,18 +54,41 @@ then saving to `.sentinel/snapshots/context_snapshot.md` before running `/clear`
     return {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": f"""# Context Snapshot Created
+            "additionalContext": f"""# Context Snapshot Created - Index Generation Required
 
-Snapshot saved to: {snapshot_path}
+Snapshot saved to: `{snapshot_path}`
 
-**The snapshot contains:**
-- Compressed conversation flow
-- Files modified during session
-- Key decisions and requirements
+## Your Task: Generate Index
 
-**Next step:** Run `/clear` now.
+Read the snapshot and prepend an index header. Use this exact format:
 
-After `/clear`, the snapshot will be automatically injected into your new session context.
+```markdown
+## Index
+
+### Metadata
+- Messages: [count from header]
+- Date: [today's date]
+- Project: [project name from context]
+
+### Topics
+- [3-5 bullet points summarizing main topics discussed]
+
+### Key Decisions
+- [2-4 bullet points of important decisions made]
+
+### Files Touched
+- Created: [files created]
+- Modified: [files modified]
+- Read: [key files read for context]
+
+---
+```
+
+**Steps:**
+1. Read `{snapshot_path}` to understand the conversation
+2. Generate the index based on content
+3. Use Edit to prepend the index right after the "---" line (after "Original messages: X")
+4. Confirm done, then tell user to run `/clear`
 """,
         }
     }
