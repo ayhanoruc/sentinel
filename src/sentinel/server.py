@@ -514,6 +514,38 @@ Apply fixes and confirm each change.
 
 
 @mcp.prompt()
+def clear_redundant() -> str:
+    """
+    Clear redundant context while preserving conversation verbatim.
+
+    Processes the transcript: keeps all text, compresses only tool outputs.
+    Then triggers /clear and reinjects the processed context.
+    """
+    return """# Context Cleanup
+
+To clean up the context while preserving your conversation:
+
+**Step 1:** Type exactly this as a chat message (not a command):
+```
+clear_redundant
+```
+
+The Sentinel hook will:
+- Read your full transcript
+- Keep all user/assistant text VERBATIM
+- Compress tool outputs (file contents, grep results) to 1-liners
+- Save to `.sentinel/snapshots/context_snapshot.md`
+
+**Step 2:** After the hook confirms, run `/clear`
+
+**Step 3:** The SessionStart hook will inject the processed context automatically.
+
+---
+*This MCP prompt cannot access the transcript directly. The hook can.*
+"""
+
+
+@mcp.prompt()
 def rules(action: str = "show") -> str:
     """
     Manage Sentinel rules.

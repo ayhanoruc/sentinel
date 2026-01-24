@@ -31,6 +31,13 @@ AI-readable project documentation:
 - Section-by-section updates with approval
 - Version history for tracking changes
 
+### Context Cleanup
+Precise context management without losing information:
+- Compresses verbose tool outputs to 1-liner summaries
+- Removes dead-end explorations and duplicate info
+- Preserves key decisions, requirements, and code changes
+- Automatically reinjects on session restart
+
 ## Installation
 
 ```bash
@@ -100,6 +107,7 @@ Fixes issues reported by Guardian.
 | `/guardian-fix` | Fix Guardian-reported issues |
 | `/rules show` | Display active rules |
 | `/rules add` | Add a session rule |
+| `/clear_redundant` | Clean context while preserving key info |
 
 ### MCP Tools (for agent use)
 
@@ -201,10 +209,12 @@ your-project/
 │   ├── rules/
 │   │   ├── project.md          # Project-specific rules
 │   │   └── session.md          # Session rules (gitignored)
-│   └── checkpoints/
-│       └── <group>/
-│           ├── CHECKPOINT.md   # Current checkpoint
-│           └── history/        # Version history
+│   ├── checkpoints/
+│   │   └── <group>/
+│   │       ├── CHECKPOINT.md   # Current checkpoint
+│   │       └── history/        # Version history
+│   └── snapshots/              # Context snapshots (gitignored)
+│       └── history/            # Previous snapshots
 ├── .claude/
 │   └── settings.json           # Hook configuration
 └── .mcp.json                   # MCP server registration

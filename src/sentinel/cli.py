@@ -34,6 +34,7 @@ def init_command(args: list[str]) -> int:
     # Create .sentinel directory structure
     (sentinel_dir / "rules").mkdir(parents=True, exist_ok=True)
     (sentinel_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
+    (sentinel_dir / "snapshots").mkdir(parents=True, exist_ok=True)
 
     # Copy default rules to project if not exists
     project_rules = sentinel_dir / "rules" / "project.md"
@@ -129,6 +130,7 @@ def init_command(args: list[str]) -> int:
     gitignore_content = """# Sentinel gitignore
 session.md
 *.log
+snapshots/
 """
     gitignore_file.write_text(gitignore_content, encoding="utf-8")
 
@@ -236,6 +238,7 @@ After initialization, the following slash commands are available in Claude Code:
   /guardian-fix        Fix issues reported by Guardian
   /rules show          Display active rules
   /rules add           Add a session rule
+  /clear_redundant     Clean up context while preserving key information
 
 For more information, see: https://github.com/ayhanoruc/sentinel
 """)
