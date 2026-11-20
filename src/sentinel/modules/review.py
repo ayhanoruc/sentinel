@@ -252,8 +252,7 @@ def on_pre_tool_use(ctx, out) -> None:
     if info is None or info["repo"] is None:
         return
     repo = info["repo"]
-    taking = gitutil.staged(repo) + (gitutil.modified(repo) if info["all"] else [])
-    r = prepare(ctx, repo, files_for(ctx, repo, taking))
+    r = prepare(ctx, repo, files_for(ctx, repo, gitutil.taking(repo, info)))
     if r is None:
         return
     lines, questions = _open(r)

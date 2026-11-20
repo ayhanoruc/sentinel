@@ -65,7 +65,7 @@ def on_pre_tool_use(ctx, out) -> None:
     if info is None or info["repo"] is None or info["limited"]:
         return
     repo = info["repo"]
-    taking = gitutil.staged(repo) + (gitutil.modified(repo) if info["all"] else [])
+    taking = gitutil.taking(repo, info)
     mine = {gitutil.norm(p) for p in ctx.session.edited()}
     foreign: dict[str, list[str]] = {}
     for rel in dict.fromkeys(taking):

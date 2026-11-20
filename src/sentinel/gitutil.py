@@ -127,10 +127,13 @@ def commit_command(command: str, cwd: Path) -> dict | None:
         repo = toplevel(cand)
         if repo:
             break
+    # Claude Code writes the message as -m "$(cat <<'EOF' … EOF)": the first line then ends inside an open quote. What
+    # follows a command substitution or a heredoc mark is message text, never a flag or a path of the commit.
+    args = re.split(r"\"?\$\(|<<", m.group(2), maxsplit=1)[0]
     try:
-        tokens = shlex.split(m.group(2), posix=True)
+        tokens = shlex.split(args, posix=True)
     except ValueError:
-        tokens = m.group(2).split()
+        tokens = args.split()
     takes_value = {"-m", "-F", "-C", "-c", "--message", "--file", "--author", "--date", "--fixup", "--squash",
                    "--reuse-message", "--reedit-message", "--cleanup", "-t", "--template"}
     all_, limited, i = False, False, 0
@@ -153,7 +156,45 @@ def commit_command(command: str, cwd: Path) -> dict | None:
         elif not t.startswith("-"):
             limited = True                             # a path given to the commit
         i += 1
-    return {"repo": repo, "all": all_, "limited": limited}
+    return {"repo": repo, "all": all_, "limited": limited, "adds": _adds(command[: m.start()])}
+
+
+_ADD = re.compile(r"""\bgit\b(?:\s+-[cC]\s+(?:"[^"]*"|'[^']*'|\S+))*\s+add\b([^\n]*?)(?=&&|\|\||;|\||\n|$)""")
+
+
+def _adds(before: str) -> str | list[str] | None:
+    """What `git add` commands in the same shell command stage before the commit: "all" (`-A`, `-u`, `.`, no path),
+    the paths named, or None when there is no `git add`. The index a hook sees does not hold these yet (seen in a
+    real run: `git add -A && git commit` took another session's untracked file past the guard)."""
+    paths: list[str] = []
+    found = False
+    for m in _ADD.finditer(before):
+        found = True
+        try:
+            tokens = shlex.split(m.group(1), posix=True)
+        except ValueError:
+            tokens = m.group(1).split()
+        named = [t for t in tokens if not t.startswith("-")]
+        if not named or any(t in ("-A", "--all", "-u", "--update") for t in tokens) or any(t in (".", "./", "*") for t in named):
+            return "all"
+        paths += [t.replace("\\", "/").rstrip("/") for t in named]
+    return paths if found else None
+
+
+def taking(repo: Path, info: dict) -> list[str]:
+    """The files a commit command would take, as the repo names them: what is staged, what `-a` adds, and what a
+    `git add` earlier in the same command stages. A path given to `git add` is matched by name, by folder and as a
+    glob; the result may hold more than the commit takes, never less."""
+    from fnmatch import fnmatch
+
+    names = dict.fromkeys(staged(repo) + (modified(repo) if info["all"] else []))
+    adds = info.get("adds")
+    if adds:
+        for p in changed_vs_head(repo):
+            if adds == "all" or any(p == a or p.startswith(a + "/") or p.endswith("/" + a) or fnmatch(p, a)
+                                    or fnmatch(p.rsplit("/", 1)[-1], a) for a in adds):
+                names[p] = None
+    return list(names)
 
 
 def norm(path: str | Path) -> str:

@@ -164,6 +164,12 @@ def test_the_catalogue_has_both_sides(w):
     ('git commit -m "x" src/a.py', False, True),
     ('git add -A && git commit -q -m "x; y && z"', False, False),
     ('git -c user.name=x commit -m "x"', False, False),
+    # the way Claude Code writes a commit: the message in a heredoc
+    ("git commit -m \"$(cat <<'EOF'\nadd y\n\nCo-Authored-By: X <x@y>\nEOF\n)\"", False, False),
+    ("git add -A && git commit -q -m \"$(cat <<'EOF'\nadd a thing\nEOF\n)\"", False, False),
+    ("git commit -am \"$(cat <<'EOF'\nmsg\nEOF\n)\"", True, False),
+    ("git commit --only -m \"$(cat <<'EOF'\nmsg\nEOF\n)\" -- src/a.py", False, True),
+    ("git commit -F - <<'EOF'\nmsg\nEOF", False, False),
 ])
 def test_what_a_commit_command_takes(w, command, all_, limited):
     info = gitutil.commit_command(command, w.repo)
@@ -200,6 +206,24 @@ def test_a_commit_that_would_take_another_sessions_files_is_held(w):
     assert denied(w.bash('git commit --only -m "mine" -- src/mine.py', sid=A)) == ""
     w.hook("SessionEnd", B, reason="other")
     assert denied(w.bash('git commit -m "mine"', sid=A)) == ""                # B ended: its files are nobody's
+
+
+def test_a_git_add_in_the_same_command_counts_as_staged(w):
+    """`git add -A && git commit`: when the hook looks, the index is still empty."""
+    w.activate("[review]\nenabled = false\n")
+    w.start(A)
+    w.start(B)
+    w.approved_task(A)
+    w.approved_task(B)
+    w.edit("src/mine.py", "a = 1\n", sid=A)
+    w.edit("src/theirs.py", "b = 1\n", sid=B)
+    for sweep in ("git add -A && git commit -m mine", "cat src/mine.py && git add . && git status --short && git commit -q -m mine",
+                  "git add src && git commit -m mine", 'git add "src/*.py" && git commit -m mine', "git add -u; git add src/theirs.py; git commit -m x"):
+        assert "src/theirs.py" in denied(w.bash(sweep, sid=A)), sweep
+    assert denied(w.bash("git add src/mine.py && git commit -m mine", sid=A)) == ""
+    assert gitutil.commit_command("git add -A && git commit -m x", w.repo)["adds"] == "all"
+    assert gitutil.commit_command("git add a.py b/c.py && git commit -m x", w.repo)["adds"] == ["a.py", "b/c.py"]
+    assert gitutil.commit_command("git commit -m x && git add -A", w.repo)["adds"] is None      # an add after the commit is not in it
 
 
 def test_commit_all_also_counts_unstaged_files_of_others(w):
