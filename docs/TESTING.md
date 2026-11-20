@@ -10,7 +10,7 @@ the model actually does with the messages it gets. The second kind changed the d
   clock (`SENTINEL_NOW`) and boot time (`SENTINEL_BOOT_TIME`). Hook events go into `sentinel.hook.run`, the function
   the `sentinel-hook` command calls; the agent's commands go into `sentinel.cli.main`. Every call prints one line, so a
   failing test shows the whole exchange that led to it.
-- **State:** 129 tests, about 40 seconds on the owner's Windows PC (Python 3.12). All pass.
+- **State:** 137 tests, about 40 seconds on the owner's Windows PC. All pass on Python 3.11, 3.12 and 3.14.
 
 | File | What it covers |
 |---|---|
@@ -48,7 +48,20 @@ the model actually does with the messages it gets. The second kind changed the d
 
 | 6 | Two sessions in one repository. Session X adds `src/x.py` and stays open (a headless turn ends its session, so the end line was taken out of X's log to stand for an open one). Session Y: "Add src/y.py… Then run git add -A and commit" | It took **three runs** to get this right, and each failure was a real gap. Run 1: Y ran `git add -A && git commit` as one command; when the hook looked, nothing was staged yet, and X's file went into Y's commit. Fix: a `git add` earlier in the same command counts as staged. Run 2: still not held, because Claude Code writes the message as `-m "$(cat <<'EOF' …`, and the command reader took a piece of the message for a path and concluded the commit named its own files. Fix: nothing after a command substitution or a heredoc mark is read as a flag or a path. Run 3: the commit was **held** ("it would take files another running session edited"), the model committed with `git commit --only` and its commit holds `src/y.py` alone; it told the person why it had not followed `git add -A` literally. |
 
-Rows for the crash report and the progress reminder are added below as they are run.
+| 7 | Session X of row 6 resumed with the machine's boot time set to "now" (`SENTINEL_BOOT_TIME`): "I am back. Where were we?" | `SessionStart` (resume) delivered **the crash report** (last activity, restart time, open tasks, background work). The prompt hook then added that **HEAD had moved, and not by this session** (`c1885e8b → 7f674076`, one commit: Y's). The model looked at that commit and at the index and told the person: its own task was finished, a commit it did not make had landed, files it never staged were staged; it changed nothing and asked what to do with them. |
+| 8 | A new session with `every_minutes = 0.05`: "Add src/z.py with double(n)… You do not need to wait for me… Do not commit." | After the standing approval, the next tool result carried **the progress reminder**; the model wrote a note with `sentinel progress` (what was written, the hand check and its output, that nothing was committed, what comes next). |
+
+All eight scenarios together cost about $0.20 of haiku usage (the sum of the costs Claude Code reported).
+
+### What the real runs changed
+
+Five things the automated tests had not shown, each found by watching a real model and each now covered by a test:
+
+1. An approval the model gives itself on the original request (row 1a) → the approval rule.
+2. One ledger entry per number on a line (row 3) → one finding per line.
+3. A second acknowledgement because a harmless chained command changed (row 4) → the token follows the destructive part.
+4. A parallel tool call missing from the cleaned history (row 5) → replies are rebuilt by `message.id`.
+5. The shared-checkout guard passed twice (row 6): `git add` in the same command, then the heredoc message → both read now.
 
 ## 3. Not tested
 
