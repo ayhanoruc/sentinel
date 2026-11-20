@@ -11,6 +11,8 @@ CODE = '''import os
 import time
 
 RETRIES = 7
+RETRY_STATUSES = {429, 502, 503}
+BATCH = 37
 
 
 def load(cfg):
@@ -50,7 +52,8 @@ def test_a_commit_is_held_until_every_flagged_line_and_question_is_settled(w):
     assert "held for review" in reason and "R1" in reason and "src/loader.py" in reason
     kinds = set(re.findall(r"F\d+ \[open\] ([\w-]+)", reason))
     assert kinds == {"numeric-literal", "default-fallback", "broad-except", "fixed-sleep", "timeout-retry", "truncation", "todo"}, kinds
-    assert "the number 7" in reason and "the number 45" in reason and "the number 3" in reason
+    assert "the numbers 429, 502, 503" in reason and "the number 37" in reason       # one finding for a line's numbers
+    assert reason.count("numeric-literal") == 2                                      # 7, 45, 3 and 50 belong to other findings
     assert "no test command was seen" in reason and "Questions:" in reason and "6." in reason
 
     code, out = w.cli("review", "set", "F1", "kept")

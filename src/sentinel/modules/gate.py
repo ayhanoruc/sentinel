@@ -48,18 +48,23 @@ def patterns(cfg: dict) -> list[tuple[str, re.Pattern, str]]:
     return [(n, re.compile(rx, re.I), why) for n, rx, why in table]
 
 
-def token_of(command: str) -> str:
-    return hashlib.sha1(command.strip().encode("utf-8")).hexdigest()[:8]
+def token_of(command: str, table: list[tuple[str, re.Pattern, str]] | None = None) -> str:
+    """The identity of what is being acknowledged: the parts of the command that match a pattern, not the harmless
+    commands chained around them. `rm -rf build && ls` and `rm -rf build && git status` are the same act."""
+    parts = [p.strip() for p in re.split(r"&&|\|\||;|\||\n", command) if p.strip()]
+    hit = [p for p in parts if any(rx.search(p) for _, rx, _ in table or [])]
+    return hashlib.sha1("\n".join(hit or [command.strip()]).encode("utf-8")).hexdigest()[:8]
 
 
 def on_pre_tool_use(ctx, out) -> None:
     cmd = ctx.command()
     if not cmd or is_plain_sentinel(cmd):
         return
-    hits = [(n, why) for n, rx, why in patterns(ctx.cfg) if rx.search(cmd)]
+    table = patterns(ctx.cfg)
+    hits = [(n, why) for n, rx, why in table if rx.search(cmd)]
     if not hits:
         return
-    token = token_of(cmd)
+    token = token_of(cmd, table)
     oks = sum(1 for e in ctx.session.all("gate_ok") if e["token"] == token)
     used = sum(1 for e in ctx.session.all("gate_used") if e["token"] == token)
     if oks > used:

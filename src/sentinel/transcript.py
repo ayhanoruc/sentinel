@@ -51,8 +51,15 @@ def context_tokens(path: Path) -> int | None:
 
 
 def _chain(path: Path, end_offset: int | None) -> list[tuple[int, bool, bool]]:
-    """The conversation as (offset, is_boundary, is_summary) from its start to its last entry before `end_offset`."""
-    index: dict[str, tuple[str | None, int, bool, bool]] = {}
+    """The conversation as (offset, is_boundary, is_summary) from its start to its last entry before `end_offset`.
+
+    The backbone is the last entry's chain of parents. One reply of the model that makes several tool calls at once is
+    written as several entries (the same `message.id`), and their results fork: the chain back from the end passes
+    through only one of them. So every entry that shares a backbone reply's `message.id` is put back in, after its
+    siblings (seen in a real transcript, 21 Nov 2026: a parallel Read was missing from the history).
+    """
+    index: dict[str, tuple[str | None, int, bool, bool, str | None]] = {}
+    replies: dict[str, dict[str, int]] = {}                 # message.id -> {entry uuid: offset}
     last = None
     with path.open("rb") as f:
         off = 0
@@ -67,17 +74,29 @@ def _chain(path: Path, end_offset: int | None) -> list[tuple[int, bool, bool]]:
             u = d.get("uuid")
             if not u or d.get("isSidechain"):
                 continue
+            mid = (d.get("message") or {}).get("id") if d.get("type") == "assistant" else None
             index[u] = (d.get("parentUuid") or d.get("logicalParentUuid"), here,
                         d.get("type") == "system" and d.get("subtype") == "compact_boundary",
-                        bool(d.get("isCompactSummary")))
+                        bool(d.get("isCompactSummary")), mid)
+            if mid:
+                replies.setdefault(mid, {})[u] = here
             last = u
-    chain, seen, u = [], set(), last
+    back, seen, u = [], set(), last
     while u and u in index and u not in seen:
         seen.add(u)
-        parent, here, boundary, summary = index[u]
+        back.append(u)
+        u = index[u][0]
+    back.reverse()
+    chain: list[tuple[int, bool, bool]] = []
+    for i, u in enumerate(back):
+        _, here, boundary, summary, mid = index[u]
         chain.append((here, boundary, summary))
-        u = parent
-    chain.reverse()
+        nxt = index[back[i + 1]][4] if i + 1 < len(back) else None
+        if mid and nxt != mid:                              # the reply's last entry on the backbone: add its siblings
+            for sib, sib_off in sorted(replies[mid].items(), key=lambda kv: kv[1]):
+                if sib not in seen:
+                    seen.add(sib)
+                    chain.append((sib_off, False, False))
     return chain
 
 

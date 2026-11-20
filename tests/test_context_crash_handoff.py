@@ -41,6 +41,27 @@ def test_the_history_is_the_stretch_that_was_just_compacted_without_tool_outputs
     assert lines[info["recent_line"] - 1] == "### PERSON" and "question 6" in lines[info["recent_line"]]
 
 
+def test_tool_calls_made_at_once_are_all_in_the_history(tmp_path):
+    """One reply with two tool calls is two entries whose results fork; the chain back from the end holds only one."""
+    def reply(uid, parent, file):
+        return {"type": "assistant", "uuid": uid, "parentUuid": parent, "isSidechain": False,
+                "message": {"id": "msg_1", "role": "assistant", "content": [{"type": "tool_use", "id": uid, "name": "Read", "input": {"file_path": file}}]}}
+
+    def result(uid, parent):
+        return {"type": "user", "uuid": uid, "parentUuid": parent, "isSidechain": False,
+                "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": parent, "content": "…"}]}}
+
+    lines = [{"type": "user", "uuid": "u1", "parentUuid": None, "message": {"role": "user", "content": "read both"}},
+             reply("a1", "u1", "part2.txt"), reply("a2", "a1", "part3.txt"), result("r3", "a2"), result("r2", "a1")]
+    t = tmp_path / "t.jsonl"
+    t.write_text("\n".join(json.dumps(x) for x in lines) + "\n", encoding="utf-8")
+    out = tmp_path / "h.md"
+    info = tr.history(t, out, 0.25)
+    text = out.read_text(encoding="utf-8")
+    assert "part2.txt" in text and "part3.txt" in text and info["entries"] == 3
+    assert text.index("part2.txt") < text.index("part3.txt")
+
+
 def test_a_very_long_message_is_cut_with_a_visible_mark(tmp_path):
     t = transcript(tmp_path / "t.jsonl", [{"user": "start " + "y" * 9000}, {"assistant": "ok", "tokens": 1}])
     out = tmp_path / "h.md"

@@ -125,8 +125,16 @@ Each flow lists its switch in `config.toml`.
   tracking and drops the gate.
 - **The contract:** for a `normal` or `large` task the agent fills the task file: Understanding, Scope, Options and
   trade-offs, Assumptions, Open questions, World model, Proof. It presents it to the person, sized to the task, and
-  waits. `sentinel task approve T<n> --basis "<the person's words>"` checks that every required section has content and
-  records the basis. `trivial` tasks and sub-tasks of an approved task are approved at once.
+  waits. `trivial` tasks and sub-tasks of an approved task are approved at once.
+- **The approval (exact):** `sentinel task approve T<n> --basis "<the person's words>"` passes only when every section
+  of the contract has content, the person has written a message since the contract was opened, and the words given
+  are found verbatim in what they wrote since then (read from the session's transcript; case and spacing aside). So the
+  agent cannot approve its own contract in the turn it wrote it, nor on words nobody said. This rule came from the
+  first real run: the model wrote a good contract and then approved it itself on the original request.
+- **A standing instruction** (`standing = true`): when the person said beforehand not to wait for them, the agent
+  approves with `--standing "<those words>"`. The words must be in what they wrote; the task is recorded as "approved
+  on a standing instruction, the contract not confirmed by the person", and the agent is told to put the contract in
+  its final message. `standing = false` closes this path: the agent always waits.
 - **World model** (`world_model = true`): the contract's World model section holds expected outcomes as checkable
   statements. Lenses help the agent think it through from the right seat: `sentinel lens` lists them (UI, algorithm,
   data, API, operations, agent-facing text; one file each, more can be added). The review (5.4) compares what was

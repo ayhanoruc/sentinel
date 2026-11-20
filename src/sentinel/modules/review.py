@@ -27,7 +27,7 @@ DETECTORS: list[tuple[str, str, str, str]] = [
      "catches every error: the caller may never learn that it failed"),
     ("fixed-sleep", "any", r"\btime\.sleep\(|\basyncio\.sleep\(\s*[\d.]|(?<![\w-])sleep\s+\d|\bStart-Sleep\b|\bsetTimeout\([^,]+,\s*\d|\bThread\.sleep\(",
      "a fixed wait: it is either too short on a slow day or wasted on a fast one"),
-    ("timeout-retry", "code", r"\b(?:timeout|retries|max_retries|retry|attempts|max_attempts|backoff)\w*\s*[=:]\s*\d",
+    ("timeout-retry", "code", r"(?i)\b(?:timeout|retries|max_retries|retry|attempts|max_attempts|backoff)\w*\s*[=:]\s*\d",
      "a limit someone chose: why this value"),
     ("truncation", "code", r"\[\s*:\s*\d{2,}\s*\]|\[\s*-\d{2,}\s*:\s*\]|\|\s*(?:head|tail)\b|\.slice\(\s*0\s*,\s*\d+\s*\)|\blimit\s*=\s*\d+|\bSelect-Object\s+-(?:First|Last)\b",
      "cuts at a fixed size: what is cut is not seen"),
@@ -76,22 +76,27 @@ def scan(cfg: dict, repo: Path, files: list[str]) -> dict[str, dict]:
             if not text:
                 continue
             comment = text.startswith(_COMMENT)
+            flagged = False
             for kind, where, rx, why in table:
                 if (where == "code" and is_test) or (where == "tests" and not is_test):
                     continue
                 if comment and kind not in ("todo", "silenced-check"):
                     continue
                 if rx.search(text):
+                    flagged = True
                     found.setdefault(_key(kind, file, text), {"kind": kind, "file": file, "line": n, "text": text[:TEXT_MAX], "why": why})
-            if "numeric-literal" not in off and not is_test and not comment:
+            # numbers: one finding for a line, and only when no other detector already asks about that line
+            if "numeric-literal" not in off and not is_test and not comment and not flagged:
+                new = []
                 for m in _NUMBER.finditer(_STRINGS.sub('""', text)):
                     lit = m.group(0).replace("_", "")
-                    if float(lit) in ignore or lit in seen_numbers:
-                        continue
-                    seen_numbers.add(lit)
-                    found.setdefault(_key("numeric-literal", file, lit), {
+                    if float(lit) not in ignore and lit not in seen_numbers:
+                        seen_numbers.add(lit)
+                        new.append(lit)
+                if new:
+                    found.setdefault(_key("numeric-literal", file, text), {
                         "kind": "numeric-literal", "file": file, "line": n, "text": text[:TEXT_MAX],
-                        "why": f"the number {lit}: a value someone chose"})
+                        "why": f"the number{'s' if len(new) > 1 else ''} {', '.join(new)}: {'values' if len(new) > 1 else 'a value'} someone chose"})
         if is_test and file.endswith(".py") and "test-without-assert" not in off:
             for f in _tests_without_assert(repo / file, {n for n, _ in lines}):
                 found.setdefault(_key("test-without-assert", file, f["text"]), {**f, "file": file})
