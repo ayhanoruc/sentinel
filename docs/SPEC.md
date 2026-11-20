@@ -212,21 +212,44 @@ Each flow lists its switch in `config.toml`.
 - **HEAD moved:** at each prompt, when the repo's `HEAD` differs from what this session last saw and this session did
   not move it, the agent is told the range.
 
-### 5.9 Context: park, compact, restore — `[context]`
+### 5.9 Context: automatic compaction, notes before it, restore after it — `[context]`
 
-- **Park:** when the main conversation's context passes `park_at_tokens` (default 800 000, the owner's figure for
-  1M-context sessions; lower it for smaller models), the next tool result tells the agent to finish its step, bring
-  `notes.md` up to date (where it is, the exact next step, background work, open doubts, what no file holds yet,
-  corrections not yet recorded) and carry on. `/sentinel-park` does the same on demand, before a manual `/compact`.
+- **The trigger:** Claude Code compacts by itself when the context is `compact_at_percent` full (default 80, the
+  owner's figure). `sentinel init` writes that number into the repository's Claude Code settings as
+  `env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, Claude Code's own setting for it; `uninstall` takes its own value out again,
+  and `doctor` says when the settings and the config do not agree. The person sets nothing, and a percent fits every
+  window size. `0` leaves Claude Code's own trigger (near the very end of the window).
+- **The hold:** Claude Code asks the `PreCompact` hook before each automatic compaction. Sentinel answers "not now"
+  until the agent's notes are written:
+  1. The first time, it records the context's size and a limit (`size × hold_until_percent / compact_at_percent`;
+     with the defaults 90 over 80: half of the room that is left above the trigger) and blocks.
+  2. At the next tool result, or with the person's next message, the agent is told that a compaction is waiting for
+     it: bring `notes.md` up to date now (where it is, the exact next step, background work, open doubts, what no
+     file holds yet, corrections not yet recorded), then run `sentinel park done`. That command is refused while the
+     notes file is unchanged since the message.
+  3. Claude Code asks again before every request. Sentinel lets the compaction go when the agent ran
+     `sentinel park done`, when the context reached the limit, when a request did not get through (an API error
+     follows the last reply in the transcript), or when the size cannot be read. Once let go, nothing is held again
+     until that compaction is over.
+
+  The percent used is the one in force in the session, read from the environment Claude Code gives its hooks: a
+  settings file that is out of step means no hold, never a wrong one. A manual `/compact` and a subagent's own
+  compaction are never held. `hold_until_percent = 0` switches the hold off.
+- **Why the hold is safe** (read in Claude Code 2.1.310's own code, then seen in a real run): a compaction a hook
+  blocks is not counted as a failure, shows the person nothing, and is tried again before the next request. The last
+  reply before the hold was sent under the trigger, so `size × 100 / percent` is never more than the window and the
+  limit is never more than `hold_until_percent` of it. At the window's very end Claude Code cannot send a request at
+  all; the "request did not get through" way out is for that case.
+- **Park on demand:** `/sentinel-park` (`sentinel park`) gives the same list before a manual `/compact`.
+  `park_at_tokens` (default 0: off) adds an earlier reminder at a fixed token count.
 - **Compact:** the `PreCompact` hook adds instructions to the summary prompt: keep the person's standing instructions
   and corrections word for word, the current task and next step, open questions, names and ids; details live in files.
 - **Restore:** after any compaction the `SessionStart` hook writes the cleaned history of the compacted stretch
   (`history-<n>.md`: the person's messages, the agent's, tool calls without their outputs) and gives the agent the
   recovery message: read the history (from the line where its last quarter begins, then earlier if needed), the notes,
   the open tasks and the progress file; what was proven is gone unless a file holds it. The standing rules follow.
-- **Not possible in an interactive session:** running `/compact` from a hook, or changing model or effort around it.
-  Claude Code's own auto-compact does the compaction; its threshold is the `autoCompactWindow` setting.
-  `sentinel doctor` warns when that window is not above `park_at_tokens`.
+- **Not possible:** running `/compact` from a hook, or changing model or effort around a compaction. The compaction
+  itself is always Claude Code's; Sentinel sets when it comes and makes it wait for the notes.
 
 ### 5.10 Crash report — `[crash]`
 
@@ -258,14 +281,14 @@ prints the effective values. Every number has its reason next to it in the templ
 | `[gate]` | `enabled` (true), `disable` ([]), `[[gate.patterns]]` (extra patterns) |
 | `[progress]` | `enabled` (true), `every_minutes` (20) |
 | `[board]` | `enabled` (true), `stale_after_hours` (24) |
-| `[context]` | `enabled` (true), `park_at_tokens` (800000; 0 switches the park off), `recent_fraction` (0.25) |
+| `[context]` | `enabled` (true), `compact_at_percent` (80; 0 leaves Claude Code's own trigger), `hold_until_percent` (90; 0: the compaction does not wait for the notes), `park_at_tokens` (0: off), `recent_fraction` (0.25) |
 | `[crash]` | `enabled` (true) |
 | `[handoff]` | `enabled` (true), `dir` (".sentinel/handoff") |
 
 ## 7. Commands
 
 Agent: `task open|approve|done|list`, `lens [name]`, `review [set|answer|status]`, `catalogue`, `gate ok`,
-`progress`, `claim`, `release`, `board`, `learn`, `unlearn`, `rules`, `park`, `handoff`.
+`progress`, `claim`, `release`, `board`, `learn`, `unlearn`, `rules`, `park [done]`, `handoff`.
 Person: `init`, `uninstall`, `doctor`, `config`, `board`, `status`, `transcript <file>`.
 
 ## 8. Decisions taken while building, with the alternatives

@@ -26,6 +26,16 @@ EVENTS: dict[str, tuple[str | None, int]] = {
     "SessionEnd": (None, 30),
 }
 SKILLS = ("park", "handoff", "review", "board")
+PCT_ENV = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"      # Claude Code's own setting: compact when the context is this percent full
+
+
+def _percent(cfg: dict) -> str | None:
+    """`[context] compact_at_percent` as Claude Code's setting takes it; None when Sentinel leaves the trigger alone."""
+    c = cfg.get("context", {})
+    v = float(c.get("compact_at_percent") or 0)
+    if not c.get("enabled") or not 0 < v <= 100:
+        return None
+    return str(int(v)) if v == int(v) else str(v)
 
 
 def _ours(entry: dict) -> bool:
@@ -61,6 +71,10 @@ def init(args) -> tuple[int, str]:
         settings = _read_json(path)
     except json.JSONDecodeError as exc:
         return 1, f"{path} is not valid JSON ({exc}); nothing was changed in it. Fix it and run `sentinel init` again."
+    try:
+        pct = _percent(config_mod.load(root, core.home()))
+    except Exception as exc:  # noqa: BLE001: whatever stops the settings from loading is the answer
+        return 1, f"{cfg} does not load ({exc}); nothing was changed in {path}. Fix it and run `sentinel init` again."
     hooks = settings.setdefault("hooks", {})
     command = args.hook_command or HOOK
     for event, (matcher, timeout) in EVENTS.items():
@@ -69,8 +83,13 @@ def init(args) -> tuple[int, str]:
         if matcher:
             entry = {"matcher": matcher, **entry}
         hooks[event] = kept + [entry]
+    if pct:
+        settings.setdefault("env", {})[PCT_ENV] = pct
     sysutil.atomic_write(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     done.append(f"registered the hook for {len(EVENTS)} events in {path}")
+    if pct:
+        done.append(f"set {PCT_ENV}={pct} there: Claude Code compacts by itself when the context is {pct} percent "
+                    "full ([context] compact_at_percent)")
     for name in SKILLS:
         sysutil.atomic_write(root / ".claude" / "skills" / f"sentinel-{name}" / "SKILL.md",
                              (core.PACKAGE_TEXTS / "install" / f"skill-{name}.md").read_text(encoding="utf-8"))
@@ -86,6 +105,10 @@ def init(args) -> tuple[int, str]:
 def uninstall(args) -> tuple[int, str]:
     root = Path(args.dir).resolve()
     removed = []
+    try:
+        pct = _percent(config_mod.load(root, core.home()))
+    except Exception:  # noqa: BLE001: without readable settings the percent Sentinel wrote is not known; it is left
+        pct = None
     for local in (False, True):
         path = _settings(root, local)
         if not path.is_file():
@@ -106,9 +129,18 @@ def uninstall(args) -> tuple[int, str]:
                 del hooks[event]
         if not hooks:
             settings.pop("hooks", None)
-        if changed:
+        env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
+        ours = pct is not None and str(env.get(PCT_ENV)) == pct         # the value Sentinel wrote, not another one
+        if ours:
+            del env[PCT_ENV]
+            if not env:
+                settings.pop("env", None)
+        if changed or ours:
             sysutil.atomic_write(path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+        if changed:
             removed.append(f"took the hook out of {path}")
+        if ours:
+            removed.append(f"took {PCT_ENV}={pct} out of {path}: Claude Code is back on its own compaction trigger")
     for name in SKILLS:
         folder = root / ".claude" / "skills" / f"sentinel-{name}"
         if folder.is_dir():
@@ -168,18 +200,35 @@ def doctor(args) -> tuple[int, str]:
         except (OSError, subprocess.SubprocessError) as exc:
             check(False, f"hook could not be run: {exc}")
     check((root / ".git").exists() or None, "a git repository" if (root / ".git").exists() else "not a git repository: the review, the commit guard and HEAD checks do nothing here")
-    park = int(cfg["context"]["park_at_tokens"])
-    windows = []
-    for p in (Path.home() / ".claude" / "settings.json", _settings(root, False), _settings(root, True)):
+    files = []                                               # Claude Code's settings, the later ones winning
+    user = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "settings.json"
+    for p in (user, _settings(root, False), _settings(root, True)):
         try:
-            w = _read_json(p).get("autoCompactWindow")
+            files.append((p, _read_json(p)))
         except json.JSONDecodeError:
-            w = None
+            continue
+    pct = _percent(cfg)
+    if pct:
+        found = [(p, str(s["env"][PCT_ENV])) for p, s in files if isinstance(s.get("env"), dict) and PCT_ENV in s["env"]]
+        where, value = found[-1] if found else (None, None)
+        check(True if value == pct else None,
+              f"automatic compaction at {pct} percent: {PCT_ENV}={pct} in {where}" if value == pct else
+              f"compact_at_percent is {pct} but " + (f"{where} has {PCT_ENV}={value}" if found else f"{PCT_ENV} is in none of Claude Code's settings files")
+              + ": run `sentinel init` again")
+        until = float(cfg["context"]["hold_until_percent"])
+        waits = float(pct) < until <= 100
+        check(True if waits else None, f"the compaction waits for the agent's notes until {until:g} percent" if waits else
+              f"hold_until_percent ({until:g}) is not above compact_at_percent ({pct}): the compaction does not wait for the agent's notes")
+        for p, s in files:
+            env = s.get("env") if isinstance(s.get("env"), dict) else {}
+            if s.get("autoCompactEnabled") is False or env.get("DISABLE_AUTO_COMPACT") or env.get("DISABLE_COMPACT"):
+                check(None, f"automatic compaction is switched off in {p}: compact_at_percent has no effect")
+    park = int(cfg["context"]["park_at_tokens"])
+    for p, s in files if park else []:
+        w = s.get("autoCompactWindow")
         if isinstance(w, (int, float)):
-            windows.append((p, int(w)))
-    for p, w in windows:
-        check(None if park and w <= park else True, f"autoCompactWindow {w:,} in {p} "
-              + ("is not above park_at_tokens " + f"{park:,}: the park would come after the compaction" if park and w <= park else "is above the park"))
+            check(None if w <= park else True, f"autoCompactWindow {int(w):,} in {p} "
+                  + (f"is not above park_at_tokens {park:,}: the park would come after the compaction" if w <= park else "is above the park"))
     errors = core.home() / "errors.log"
     n = errors.read_text(encoding="utf-8", errors="replace").count("\n--- ") + 1 if errors.is_file() and errors.stat().st_size else 0
     check(None if n else True, f"{n} hook error(s) recorded in {errors}" if n else "no hook errors recorded")
@@ -196,11 +245,16 @@ def status(args, ctx) -> tuple[int, str]:
     for e in s.all("moment"):
         counts[e["name"]] = counts.get(e["name"], 0) + 1
     tasks = s.tasks().values()
+    passes: dict[str, int] = {}
+    for e in s.all("compact_pass"):
+        passes[e.get("why", "?")] = passes.get(e.get("why", "?"), 0) + 1
     lines = [f"Session {ctx.sid[:8]} in {ctx.root}", f"Folder: {s.dir}", "",
              "Tasks: " + (", ".join(f"{t['id']} {t['status']}" for t in tasks) or "none"),
              "Messages given to the agent, by kind: " + (", ".join(f"{k} ×{v}" for k, v in sorted(counts.items())) or "none"),
              f"Reviews passed: {len(s.all('review_pass'))}   irreversible commands acknowledged: {len(s.all('gate_ok'))}   "
-             f"progress notes: {len(s.all('progress'))}   compactions restored: {len(s.all('restore'))}"]
+             f"progress notes: {len(s.all('progress'))}   compactions restored: {len(s.all('restore'))}",
+             f"Automatic compactions held for the notes: {len(s.all('compact_hold'))}"
+             + "".join(f"   let go on {why}: {n}" for why, n in sorted(passes.items()))]
     return 0, "\n".join(lines)
 
 

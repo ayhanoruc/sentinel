@@ -20,6 +20,8 @@ SHELL_TOOLS = ("Bash", "PowerShell")
 # a learned rule's target and the text it is appended to
 LEARN_TARGETS = {"core": "rules/core.md", "contract": "moments/contract.md", "review": "moments/review.md",
                  "tests": "moments/tests.md", "park": "moments/park.md"}
+# other texts that carry a target's learned rules too
+LEARN_ALSO = {"moments/park-hold.md": "park"}
 
 
 def home() -> Path:
@@ -209,7 +211,7 @@ def render(name: str, root: Path | None, **values) -> str:
     body = text_path(name, root).read_text(encoding="utf-8")
     for k, v in values.items():
         body = body.replace("{" + k + "}", str(v))
-    target = next((t for t, n in LEARN_TARGETS.items() if n == name), None)
+    target = next((t for t, n in LEARN_TARGETS.items() if n == name), None) or LEARN_ALSO.get(name)
     rules = learned(target, root) if target else []
     if rules:
         body = body.rstrip() + "\n\nLearned from the person's corrections:\n" + "\n".join(f"- {r['rule']}" for r in rules)
@@ -245,6 +247,8 @@ class Out:
         """The text for stdout ("" when there is nothing to say)."""
         ctx = "\n\n".join(self.contexts)
         if event == "PreCompact":
+            if self.blocks:                                       # the compaction does not run now
+                return json.dumps({"decision": "block", "reason": "\n\n".join(self.blocks)})
             return "\n\n".join(self.compact)                      # plain text: added to the summary's instructions
         if event == "PreToolUse":
             spec: dict = {"hookEventName": event}

@@ -58,9 +58,10 @@ class A:
     dir, local, hook_command = str(repo), False, a.hook
 
 
-code, text = install.init(A)
-if a.config:
+if a.config:                      # before init: init writes `compact_at_percent` from it into Claude Code's settings
     cfg = repo / ".sentinel" / "config.toml"
+    cfg.parent.mkdir(exist_ok=True)
     cfg.write_text(a.config.replace("\\n", "\n"), encoding="utf-8")
+code, text = install.init(A)
 print(text.splitlines()[0])
 print("config:", (repo / ".sentinel" / "config.toml").read_text(encoding="utf-8")[:200].replace("\n", " | ") if a.config else "default")

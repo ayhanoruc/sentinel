@@ -64,9 +64,11 @@ if debug.is_file():
             what = tin.get("command") or tin.get("file_path") or ev.get("source") or ev.get("trigger") or ev.get("notification_type") or ""
             ans = d["out"]
             try:
-                spec = json.loads(ans).get("hookSpecificOutput", {}) if ans.startswith("{") else {}
+                whole = json.loads(ans) if ans.startswith("{") else {}
             except json.JSONDecodeError:
-                spec = {}
-            verdict = spec.get("permissionDecision") or ("context" if spec.get("additionalContext") else ("text" if ans else "-"))
-            first = (spec.get("permissionDecisionReason") or spec.get("additionalContext") or ans or "").strip().splitlines()
+                whole = {}
+            spec = whole.get("hookSpecificOutput", {})
+            verdict = spec.get("permissionDecision") or whole.get("decision") or (
+                "context" if spec.get("additionalContext") else ("text" if ans else "-"))
+            first = (spec.get("permissionDecisionReason") or spec.get("additionalContext") or whole.get("reason") or ans or "").strip().splitlines()
             print(f"{ev.get('hook_event_name', '?'):17} {ev.get('tool_name', ''):11} {str(what)[:70]:70} {verdict:8} {first[0][:90] if first else ''}")

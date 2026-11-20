@@ -22,9 +22,13 @@ _NOTIFICATION = re.compile(r"<task-notification>.*?<summary>(.*?)</summary>.*?</
 _COMMAND = re.compile(r"<command-name>(.*?)</command-name>", re.S)
 
 
-def context_tokens(path: Path) -> int | None:
-    """Tokens in the main conversation's context at its last assistant entry; None right after a compaction or when the
-    transcript has no such entry (the size is then not known, which is different from zero)."""
+def last_reply(path: Path) -> dict | None:
+    """The main conversation's last real reply: `id`, `tokens` (the context it was given: the input side of its
+    usage) and `error_after` (an API error entry follows it: a request since then did not get through).
+
+    None right after a compaction, or when the transcript's tail holds no reply: the size is then not known, which
+    is different from zero. An API error is written as an assistant entry with zero usage; it is never the reply.
+    """
     try:
         size = path.stat().st_size
     except OSError:
@@ -33,6 +37,7 @@ def context_tokens(path: Path) -> int | None:
         with path.open("rb") as f:
             f.seek(max(0, size - tail))
             lines = f.read().decode("utf-8", errors="replace").splitlines()
+        error_after = False
         for line in reversed(lines):
             try:
                 e = json.loads(line)
@@ -40,14 +45,26 @@ def context_tokens(path: Path) -> int | None:
                 continue                          # the first line of a tail is usually cut
             if e.get("type") == "system" and e.get("subtype") == "compact_boundary":
                 return None
-            if e.get("type") == "assistant" and not e.get("isSidechain"):
-                u = (e.get("message") or {}).get("usage") or {}
-                if u:
-                    return (int(u.get("input_tokens") or 0) + int(u.get("cache_read_input_tokens") or 0)
-                            + int(u.get("cache_creation_input_tokens") or 0))
+            if e.get("type") != "assistant" or e.get("isSidechain"):
+                continue
+            m = e.get("message") or {}
+            if e.get("isApiErrorMessage") or m.get("model") == "<synthetic>":
+                error_after = True
+                continue
+            u = m.get("usage") or {}
+            if u:
+                return {"id": m.get("id") or e.get("uuid"), "error_after": error_after,
+                        "tokens": (int(u.get("input_tokens") or 0) + int(u.get("cache_read_input_tokens") or 0)
+                                   + int(u.get("cache_creation_input_tokens") or 0))}
         if size <= tail:
             break
     return None
+
+
+def context_tokens(path: Path) -> int | None:
+    """Tokens in the main conversation's context at its last real reply; None when that is not known."""
+    reply = last_reply(path)
+    return reply["tokens"] if reply else None
 
 
 def _chain(path: Path, end_offset: int | None) -> list[tuple[int, bool, bool]]:

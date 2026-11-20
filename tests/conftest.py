@@ -25,6 +25,8 @@ class World:
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(self.repo))
         monkeypatch.delenv("SENTINEL_SESSION", raising=False)
         monkeypatch.delenv("CLAUDE_ENV_FILE", raising=False)
+        monkeypatch.delenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", raising=False)   # as in a session Sentinel did not set up
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp / "claude-user"))      # never the real user's Claude Code settings
         monkeypatch.setenv("SENTINEL_BOOT_TIME", "1000")           # the machine booted long before every test clock
         self.clock = 1_800_000_000.0
         self.tick(0)

@@ -44,7 +44,8 @@ DEFAULTS: dict = {
     "gate": {"enabled": True, "disable": [], "patterns": []},
     "progress": {"enabled": True, "every_minutes": 20},
     "board": {"enabled": True, "stale_after_hours": 24},
-    "context": {"enabled": True, "park_at_tokens": 800_000, "recent_fraction": 0.25},
+    "context": {"enabled": True, "compact_at_percent": 80, "hold_until_percent": 90, "park_at_tokens": 0,
+                "recent_fraction": 0.25},
     "crash": {"enabled": True},
     "handoff": {"enabled": True, "dir": ".sentinel/handoff"},
 }
@@ -97,9 +98,11 @@ every_minutes = 20              # long enough not to interrupt short work, short
 enabled = true
 stale_after_hours = 24          # a session silent this long is not counted as live
 
-[context]                       # notes before a compact, cleaned history and recovery after it
+[context]                       # automatic compaction that waits for the agent's notes; cleaned history and recovery after it
 enabled = true
-park_at_tokens = 800000         # for 1M-context sessions (the owner's figure); about 150000 for a 200k model; 0 = off
+compact_at_percent = 80         # Claude Code compacts by itself when the context is this full (the owner's figure). `sentinel init` writes it into .claude/settings as CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: run it again after changing this. 0 = leave Claude Code's own trigger
+hold_until_percent = 90         # the compaction waits for the agent's notes, at the latest until the context is this full (half of the room left above 80). 0 = do not wait
+park_at_tokens = 0              # an extra, earlier reminder to write the notes at this many tokens. 0 = off
 recent_fraction = 0.25          # the part of the compacted history the agent is told to read first
 
 [crash]                         # what was cut when the machine restarted

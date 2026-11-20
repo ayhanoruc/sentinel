@@ -14,8 +14,9 @@ sentinel doctor                        # checks the setup and times one hook cal
 ```
 
 `sentinel init` writes `.sentinel/config.toml` (its presence activates Sentinel in the repository), registers one hook
-command for eight Claude Code events in `.claude/settings.json`, and adds four small skills and one subagent under
-`.claude/`. `sentinel uninstall` takes the hook and those files out again and leaves the data.
+command for eight Claude Code events in `.claude/settings.json`, sets Claude Code's automatic compaction there to 80
+percent of the context (`[context] compact_at_percent`), and adds four small skills and one subagent under
+`.claude/`. `sentinel uninstall` takes the hook, that setting and those files out again and leaves the data.
 Sessions started in the repository after that use it; nothing changes in other repositories.
 
 ## What it does
@@ -32,7 +33,7 @@ Sessions started in the repository after that use it; nothing changes in other r
 | Irreversible commands | `rm -rf`, `git reset --hard`, force-push, `down -v`, `DROP`, ACL changes, cloud deletes | held once: look at the target, name the way back, acknowledge, run | `[gate]` |
 | Progress file | every 20 minutes of open work | a reminder to add a note the person can read without asking | `[progress]` |
 | Session board | always | `sentinel board`: every session on the machine, its task, last note, claims; a commit that would take another session's files is held | `[board]` |
-| Context | near the limit; at a compaction; after it | notes brought up to date; instructions for the summary; cleaned history, notes, tasks and rules given back | `[context]` |
+| Context | when the context is 80 percent full; at the compaction; after it | Claude Code compacts by itself at 80 percent (`sentinel init` sets it); the compaction waits until the agent has written its notes; instructions for the summary; cleaned history, notes, tasks and rules given back | `[context]` |
 | Crash report | a session resumed after the machine restarted | what was open and what was running | `[crash]` |
 | Hand-off | `sentinel handoff` | a brief with the facts filled in and the narrative left to write | `[handoff]` |
 
@@ -43,7 +44,7 @@ the user (`~/.sentinel/texts/`) can replace.
 ## Commands
 
 For the agent: `task open|approve|done|list`, `lens`, `review [set|answer|status]`, `catalogue`, `gate ok`,
-`progress`, `claim`, `release`, `learn`, `unlearn`, `rules`, `park`, `handoff`.
+`progress`, `claim`, `release`, `learn`, `unlearn`, `rules`, `park [done]`, `handoff`.
 For you: `init`, `uninstall`, `doctor`, `config`, `board`, `status`, `transcript <file>`.
 In a session: `/sentinel-park` (before `/compact`), `/sentinel-handoff`, `/sentinel-review`, `/sentinel-board`.
 
