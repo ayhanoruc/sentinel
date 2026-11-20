@@ -1,275 +1,87 @@
-"""Sentinel CLI - Command line interface for setup and management."""
+"""The `sentinel` command: what the agent runs to talk to Sentinel, and what the person runs to set it up and look in.
 
+Each command prints what happened and what to do next. A command that belongs to a session finds it from
+`SENTINEL_SESSION` (set by the SessionStart hook), `--session`, or, when a repo has exactly one running session, that
+one.
+"""
 from __future__ import annotations
 
-import json
-import shutil
+import argparse
+import os
 import sys
 from pathlib import Path
 
-# ===========================================================================
-# CONFIGURATION
-# ===========================================================================
-GLOBAL_SENTINEL_DIR = Path.home() / ".sentinel"
-PROJECT_SENTINEL_DIR = Path(".sentinel")
-DEFAULT_RULES_FILE = Path(__file__).parent / "rules" / "defaults" / "common.md"
+from . import __version__, config as config_mod, core, sysutil
 
 
-def init_command(args: list[str]) -> int:
-    """
-    Initialize Sentinel in the current project.
-
-    Creates:
-    - .sentinel/ directory structure
-    - Default project rules
-    - Claude Code hooks configuration
-    - MCP server registration
-    """
-    print("Initializing Sentinel...")
-
-    project_dir = Path.cwd()
-    sentinel_dir = project_dir / ".sentinel"
-    claude_dir = project_dir / ".claude"
-
-    # Create .sentinel directory structure
-    (sentinel_dir / "rules").mkdir(parents=True, exist_ok=True)
-    (sentinel_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
-    (sentinel_dir / "snapshots").mkdir(parents=True, exist_ok=True)
-
-    # Copy default rules to project if not exists
-    project_rules = sentinel_dir / "rules" / "project.md"
-    if not project_rules.exists():
-        project_rules.write_text("""# Project Rules
-
-> Project-specific rules for this repository.
-> Add rules that apply to this project's conventions and requirements.
-
-## Project Conventions
-
-- SHOULD: Follow existing code style and patterns in this repository
-- SHOULD: Add tests for new functionality
-
-## [Add your project-specific rules below]
-
-""", encoding="utf-8")
-        print(f"  Created: {project_rules}")
-
-    # Initialize global sentinel directory if not exists
-    if not GLOBAL_SENTINEL_DIR.exists():
-        GLOBAL_SENTINEL_DIR.mkdir(parents=True)
-        global_rules_dir = GLOBAL_SENTINEL_DIR / "rules"
-        global_rules_dir.mkdir(exist_ok=True)
-
-        # Copy default common rules
-        if DEFAULT_RULES_FILE.exists():
-            shutil.copy(DEFAULT_RULES_FILE, global_rules_dir / "common.md")
-            print(f"  Created: {global_rules_dir / 'common.md'}")
-
-    # Create .claude directory for hooks
-    claude_dir.mkdir(exist_ok=True)
-
-    # Create/update hooks configuration
-    settings_file = claude_dir / "settings.json"
-    settings = {}
-
-    if settings_file.exists():
-        try:
-            settings = json.loads(settings_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            print(f"  Warning: {settings_file} contains invalid JSON, will be overwritten")
-
-    # Add Sentinel hooks
-    settings["hooks"] = {
-        "SessionStart": [{
-            "hooks": [{
-                "type": "command",
-                "command": "sentinel-hook session-start"
-            }]
-        }],
-        "UserPromptSubmit": [{
-            "hooks": [{
-                "type": "command",
-                "command": "sentinel-hook user-prompt"
-            }]
-        }],
-        "PostToolUse": [{
-            "matcher": "Edit|Write",
-            "hooks": [{
-                "type": "command",
-                "command": "sentinel-hook post-edit"
-            }]
-        }]
-    }
-
-    settings_file.write_text(json.dumps(settings, indent=2), encoding="utf-8")
-    print(f"  Created: {settings_file}")
-
-    # Create/update MCP configuration
-    mcp_file = project_dir / ".mcp.json"
-    mcp_config = {}
-
-    if mcp_file.exists():
-        try:
-            mcp_config = json.loads(mcp_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            print(f"  Warning: {mcp_file} contains invalid JSON, will be overwritten")
-
-    if "mcpServers" not in mcp_config:
-        mcp_config["mcpServers"] = {}
-
-    mcp_config["mcpServers"]["sentinel"] = {
-        "type": "stdio",
-        "command": "sentinel-server"
-    }
-
-    mcp_file.write_text(json.dumps(mcp_config, indent=2), encoding="utf-8")
-    print(f"  Created: {mcp_file}")
-
-    # Create .gitignore entries
-    gitignore_file = sentinel_dir / ".gitignore"
-    gitignore_content = """# Sentinel gitignore
-session.md
-*.log
-snapshots/
-"""
-    gitignore_file.write_text(gitignore_content, encoding="utf-8")
-
-    print()
-    print("Sentinel initialized successfully!")
-    print()
-    print("Next steps:")
-    print("  1. Review and customize .sentinel/rules/project.md")
-    print("  2. Start a new Claude Code session to activate hooks")
-    print("  3. Use /clarify before implementation tasks")
-    print("  4. Use /checkpoint init to create documentation")
-    print()
-
-    return 0
+def _session(args) -> tuple[Path | None, str, str]:
+    """(repo root, session id, why not) for this call."""
+    sid = getattr(args, "session", None) or os.environ.get("SENTINEL_SESSION") or ""
+    if sid:
+        reg = core.registered(sid)
+        if reg is None:                                    # an id given by its first characters
+            match = [r for r, _ in core.all_sessions() if r["sid"].startswith(sid)]
+            reg = match[0] if len(match) == 1 else None
+        if reg is None:
+            return None, "", f"No session {sid} is registered on this machine. `sentinel board --all` lists them."
+        return Path(reg["root"]), reg["sid"], ""
+    root = core.find_root(Path(os.environ.get("SENTINEL_ROOT") or os.getcwd()))
+    if root is None:
+        return None, "", "Sentinel is not active here: no .sentinel/config.toml in this folder or above it. `sentinel init` activates it."
+    cfg = config_mod.load(root, core.home())
+    live = [s for _, s in core.all_sessions() if s.root.resolve() == root.resolve() and core.is_live(s, cfg)]
+    if len(live) == 1:
+        return root, live[0].sid, ""
+    if not live:
+        return root, "", "No running session was found for this repository (SENTINEL_SESSION is not set)."
+    return root, "", ("Several sessions run in this repository and SENTINEL_SESSION is not set. Name yours: --session <id>. Running: "
+                      + ", ".join(s.sid[:8] for s in live))
 
 
-def status_command(args: list[str]) -> int:
-    """Show Sentinel status in the current project."""
-    project_dir = Path.cwd()
-    sentinel_dir = project_dir / ".sentinel"
-    claude_dir = project_dir / ".claude"
+def build_parser() -> argparse.ArgumentParser:
+    from . import install, modules
 
-    print("Sentinel Status")
-    print("=" * 40)
+    ap = argparse.ArgumentParser(prog="sentinel", description="Sentinel: a discipline layer for Claude Code sessions.")
+    ap.add_argument("--version", action="version", version=f"sentinel {__version__}")
+    ap.add_argument("--session", help="the session this command is for (default: SENTINEL_SESSION)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for mod in modules.load():
+        if hasattr(mod, "cli"):
+            before = set(sub.choices)
+            mod.cli(sub)
+            for name in set(sub.choices) - before:           # a command of a flow that is off says so
+                if sub.choices[name].get_default("section") is None:
+                    sub.choices[name].set_defaults(section=mod.SECTION)
+    install.cli(sub)
+    return ap
 
-    # Check project initialization
-    if sentinel_dir.exists():
-        print(f"Project initialized: Yes ({sentinel_dir})")
-    else:
-        print("Project initialized: No")
-        print("  Run 'sentinel init' to initialize")
+
+def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    args = build_parser().parse_args(argv)
+    fn = getattr(args, "fn", None)
+    if fn is None:
+        print("Give a command. `sentinel --help` lists them.")
+        return 2
+    if getattr(args, "standalone", False):                    # init, uninstall, doctor: no session, maybe no repo yet
+        code, text = fn(args)
+        print(text)
+        return code
+    root, sid, why = _session(args)
+    needs = getattr(args, "needs_session", True)
+    if root is None or (needs and not sid):
+        print(why)
         return 1
-
-    # Check rules
-    project_rules = sentinel_dir / "rules" / "project.md"
-    global_rules = GLOBAL_SENTINEL_DIR / "rules" / "common.md"
-
-    print()
-    print("Rules:")
-    print(f"  Common:  {'Yes' if global_rules.exists() else 'No'} ({global_rules})")
-    print(f"  Project: {'Yes' if project_rules.exists() else 'No'} ({project_rules})")
-
-    # Check hooks
-    settings_file = claude_dir / "settings.json"
-    hooks_configured = False
-    if settings_file.exists():
-        try:
-            settings = json.loads(settings_file.read_text(encoding="utf-8"))
-            hooks_configured = "hooks" in settings
-        except json.JSONDecodeError:
-            print(f"  Warning: {settings_file} contains invalid JSON")
-
-    print()
-    print("Hooks:")
-    print(f"  Configured: {'Yes' if hooks_configured else 'No'}")
-
-    # Check MCP
-    mcp_file = project_dir / ".mcp.json"
-    mcp_configured = False
-    if mcp_file.exists():
-        try:
-            mcp_config = json.loads(mcp_file.read_text(encoding="utf-8"))
-            mcp_configured = "sentinel" in mcp_config.get("mcpServers", {})
-        except json.JSONDecodeError:
-            print(f"  Warning: {mcp_file} contains invalid JSON")
-
-    print()
-    print("MCP Server:")
-    print(f"  Registered: {'Yes' if mcp_configured else 'No'}")
-
-    # Check checkpoints
-    checkpoints_dir = sentinel_dir / "checkpoints"
-    checkpoint_files = list(checkpoints_dir.rglob("CHECKPOINT.md"))
-
-    print()
-    print("Checkpoints:")
-    if checkpoint_files:
-        for cp in checkpoint_files:
-            rel_path = cp.relative_to(project_dir)
-            print(f"  - {rel_path}")
-    else:
-        print("  None (run /checkpoint init)")
-
-    print()
-    return 0
-
-
-def help_command(args: list[str]) -> int:
-    """Show help information."""
-    print("""Sentinel - AI Coding Companion
-
-Usage:
-  sentinel <command> [options]
-
-Commands:
-  init      Initialize Sentinel in the current project
-  status    Show Sentinel status for the current project
-  help      Show this help message
-
-After initialization, the following slash commands are available in Claude Code:
-  /clarify <task>      Run clarification protocol before implementation
-  /checkpoint init     Create project documentation checkpoints
-  /checkpoint update   Update existing checkpoints
-  /checkpoint status   Show checkpoint freshness
-  /guardian-fix        Fix issues reported by Guardian
-  /rules show          Display active rules
-  /rules add           Add a session rule
-  /clear_redundant     Clean up context while preserving key information
-
-For more information, see: https://github.com/ayhanoruc/sentinel
-""")
-    return 0
-
-
-def main() -> int:
-    """Main entry point for the sentinel CLI."""
-    args = sys.argv[1:]
-
-    if not args:
-        return help_command([])
-
-    command = args[0]
-    command_args = args[1:]
-
-    commands = {
-        "init": init_command,
-        "status": status_command,
-        "help": help_command,
-        "--help": help_command,
-        "-h": help_command,
-    }
-
-    handler = commands.get(command)
-    if handler is None:
-        print(f"Unknown command: {command}")
-        print("Run 'sentinel help' for usage information")
+    ctx = core.Ctx({}, root, sid)
+    section = getattr(args, "section", None)
+    if section and not ctx.on(section):
+        print(f"This flow is switched off here: [{section}] enabled = false in {root / '.sentinel' / 'config.toml'}.")
         return 1
-
-    return handler(command_args)
+    code, text = fn(args, ctx)
+    print(text)
+    return code
 
 
 if __name__ == "__main__":

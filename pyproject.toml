@@ -1,44 +1,19 @@
 [project]
 name = "sentinel-ai"
-version = "0.1.0"
-description = "AI Coding Companion - Safe, verified AI-assisted development"
+version = "2.0.0"
+description = "A discipline layer for Claude Code sessions: the right message at the right moment, exact checks in code, state in files"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [
-    { name = "Chimera Labs" }
-]
-keywords = ["ai", "coding", "mcp", "claude", "development", "verification"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Software Development :: Quality Assurance",
-]
-
-dependencies = [
-    "mcp>=1.0.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "ruff>=0.1.0",
-]
+authors = [{ name = "Chimera Labs" }]
+dependencies = []
 
 [project.scripts]
 sentinel = "sentinel.cli:main"
-sentinel-server = "sentinel.server:main"
-sentinel-hook = "sentinel.hooks:main"
+sentinel-hook = "sentinel.hook:main"
 
-[project.urls]
-Homepage = "https://github.com/ayhanoruc/sentinel"
-Documentation = "https://github.com/ayhanoruc/sentinel#readme"
-Repository = "https://github.com/ayhanoruc/sentinel"
+[dependency-groups]
+dev = ["pytest>=8.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -47,14 +22,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/sentinel"]
 
-[tool.ruff]
-line-length = 100
-target-version = "py311"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]
-
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-q"

@@ -1,3 +1,3 @@
-"""Sentinel - AI Coding Companion for safe, verified AI-assisted development."""
+"""Sentinel v2: a discipline layer for Claude Code sessions (docs/SPEC.md)."""
 
-__version__ = "0.1.0"
+__version__ = "2.0.0"

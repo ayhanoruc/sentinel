@@ -1,0 +1,1 @@
+   If standards, prior art or published results could change the design, propose a field note to the person: the `sentinel-field-note` agent researches it while you read the code and returns a short note with sources. Start it only after they say yes.

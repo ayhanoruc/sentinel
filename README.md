@@ -1,233 +1,62 @@
-# Sentinel
+# Sentinel v2
 
-> AI Coding Companion for safe, verified AI-assisted development
+A discipline layer for Claude Code sessions. It gives the agent the right message at the moment it applies, checks with
+code what code can check exactly, and keeps a session's working state in files that survive a compaction, a restart
+and a hand-off. Design and reasons: [docs/SPEC.md](docs/SPEC.md). What was tested and how: [docs/TESTING.md](docs/TESTING.md).
 
-Sentinel is an integrated toolset designed to address the critical pitfalls of AI-assisted coding. It combines four components that work together to ensure high-quality, verified code generation.
-
-## Features
-
-### Rules Engine
-Hierarchical coding rules that guide AI behavior:
-- **Common rules**: Apply to all projects (error handling, configuration, verification)
-- **Project rules**: Project-specific conventions and requirements
-- **Session rules**: Temporary rules for the current session
-
-### Clarification Protocol
-Pre-implementation clarity enforcement:
-- Context gathering before coding
-- Structured clarification questions
-- Understanding summary with approval flow
-
-### Code Guardian
-LLM-based code review after every edit:
-- Injects review prompt into Claude's context after Edit/Write
-- Claude analyzes code against Sentinel rules (not static analysis)
-- Checks for: silent errors, magic numbers, missing validation, bare excepts
-- One-command fixes for reported issues
-
-### Living Checkpoint
-AI-readable project documentation:
-- Automated CHECKPOINT.md generation
-- Section-by-section updates with approval
-- Version history for tracking changes
-
-### Context Cleanup
-Precise context management without losing information:
-- Compresses verbose tool outputs to 1-liner summaries
-- Removes dead-end explorations and duplicate info
-- Preserves key decisions, requirements, and code changes
-- Automatically reinjects on session restart
-
-## Installation
-
-```bash
-# Using pip
-pip install sentinel-ai
-
-# Using uv (recommended)
-uv pip install sentinel-ai
-```
-
-## Quick Start
-
-### 1. Initialize in your project
-
-```bash
-cd your-project
-sentinel init
-```
-
-This creates:
-- `.sentinel/` directory with rules and checkpoints
-- `.claude/settings.json` with hook configurations
-- `.mcp.json` with MCP server registration
-
-### 2. Start a new Claude Code session
-
-The hooks will automatically:
-- Load rules at session start
-- Remind about rules on every message
-- Analyze code after every edit
-
-### 3. Use the slash commands
+## Install and activate
 
 ```
-/clarify Add user authentication to the API
+uv tool install <this repository>      # once per machine: puts `sentinel` and `sentinel-hook` on PATH
+cd <your repository>
+sentinel init                          # activates Sentinel here
+sentinel doctor                        # checks the setup and times one hook call
 ```
-Runs the clarification protocol before implementation.
 
-```
-/checkpoint init
-```
-Creates project documentation checkpoints.
+`sentinel init` writes `.sentinel/config.toml` (its presence activates Sentinel in the repository), registers one hook
+command for eight Claude Code events in `.claude/settings.json`, and adds four small skills and one subagent under
+`.claude/`. `sentinel uninstall` takes the hook and those files out again and leaves the data.
+Sessions started in the repository after that use it; nothing changes in other repositories.
 
-```
-/guardian-fix
-```
-Fixes issues reported by Guardian.
+## What it does
+
+| Flow | When | What happens | Switch |
+|---|---|---|---|
+| Standing rules | session start, after a compaction, every 300k tokens of context | a short text: how to write to the person, how to work | `[rules]` |
+| Learning | the person corrects the agent | `sentinel learn` appends the rule to the text it belongs to | `[learn]` |
+| Task and contract | the first edit of a piece of work | the edit waits until a task is open and its contract (understanding, scope, options, assumptions, questions, world model, proof) is approved with the person's words | `[tasks]` |
+| World model | in the contract, again at the review | expected outcomes as checkable statements, thought through with lenses (`sentinel lens`) | `[tasks] world_model` |
+| Field note | in the contract, only if the person agrees | a subagent researches standards and prior art and returns a short sourced note | `[tasks] field_note` |
+| Tests doctrine | the first edit of a test file; the review | tests must be able to fail, prefer end-to-end with printed steps, no tests for their own sake | `[testing]` |
+| Review and ledger | a `git commit` | flagged lines (numbers, fallbacks, broad excepts, sleeps, truncations, silenced checks, weak tests) need a disposition, six questions an answer; kept lines go to `.sentinel/assumptions.md` | `[review]` |
+| Irreversible commands | `rm -rf`, `git reset --hard`, force-push, `down -v`, `DROP`, ACL changes, cloud deletes | held once: look at the target, name the way back, acknowledge, run | `[gate]` |
+| Progress file | every 20 minutes of open work | a reminder to add a note the person can read without asking | `[progress]` |
+| Session board | always | `sentinel board`: every session on the machine, its task, last note, claims; a commit that would take another session's files is held | `[board]` |
+| Context | near the limit; at a compaction; after it | notes brought up to date; instructions for the summary; cleaned history, notes, tasks and rules given back | `[context]` |
+| Crash report | a session resumed after the machine restarted | what was open and what was running | `[crash]` |
+| Hand-off | `sentinel handoff` | a brief with the facts filled in and the narrative left to write | `[handoff]` |
+
+Every flow has `enabled` in `.sentinel/config.toml`; every number there has its reason beside it.
+Every text the agent receives is a Markdown file under `src/sentinel/texts/` that a repository (`.sentinel/texts/`) or
+the user (`~/.sentinel/texts/`) can replace.
 
 ## Commands
 
-### CLI Commands
+For the agent: `task open|approve|done|list`, `lens`, `review [set|answer|status]`, `catalogue`, `gate ok`,
+`progress`, `claim`, `release`, `learn`, `unlearn`, `rules`, `park`, `handoff`.
+For you: `init`, `uninstall`, `doctor`, `config`, `board`, `status`, `transcript <file>`.
+In a session: `/sentinel-park` (before `/compact`), `/sentinel-handoff`, `/sentinel-review`, `/sentinel-board`.
 
-| Command | Description |
-|---------|-------------|
-| `sentinel init` | Initialize Sentinel in current project |
-| `sentinel status` | Show Sentinel status |
-| `sentinel help` | Show help information |
+## Adding a flow
 
-### Slash Commands (in Claude Code)
+One file in `src/sentinel/modules/` with a `SECTION`, handlers named after the hook events (`on_pre_tool_use(ctx,
+out)`, …) and optionally `cli(sub)`; one line in `modules/__init__.py`. A private module goes in
+`~/.sentinel/modules/` and is switched on with its own section in the config.
 
-| Command | Description |
-|---------|-------------|
-| `/clarify <task>` | Run clarification protocol |
-| `/checkpoint init` | Create documentation checkpoints |
-| `/checkpoint update` | Update existing checkpoints |
-| `/checkpoint status` | Show checkpoint freshness |
-| `/guardian-fix` | Fix Guardian-reported issues |
-| `/rules show` | Display active rules |
-| `/rules add` | Add a session rule |
-| `/clear_redundant` | Clean context while preserving key info |
-
-### MCP Tools (for agent use)
-
-| Tool | Description |
-|------|-------------|
-| `sentinel_get_rules()` | Get active rules (call if rules not visible) |
-| `sentinel_add_rule(rule)` | Add a temporary session rule |
-| `sentinel_analyze_code(code)` | Analyze code for issues |
-
-## Configuration
-
-### Rule Format
-
-Rules use a simple markdown format:
-
-```markdown
-## Category Name
-
-- MUST: Requirement that must be followed
-- SHOULD: Strong recommendation
-- AVOID: Pattern to avoid
-- NEVER: Hard prohibition
-
-## [Tag: ml-pipeline]
-- MUST: Check for lookahead bias
-```
-
-### Rule Locations
-
-| Level | Location | Scope |
-|-------|----------|-------|
-| Common | `~/.sentinel/rules/common.md` | All projects |
-| Project | `.sentinel/rules/project.md` | This project |
-| Session | In-memory | Current session |
-
-### Hook Configuration
-
-Hooks are configured in `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{"type": "command", "command": "sentinel-hook session-start"}]
-    }],
-    "UserPromptSubmit": [{
-      "hooks": [{"type": "command", "command": "sentinel-hook user-prompt"}]
-    }],
-    "PostToolUse": [{
-      "matcher": "Edit|Write",
-      "hooks": [{"type": "command", "command": "sentinel-hook post-edit"}]
-    }]
-  }
-}
-```
-
-## Guardian Checks
-
-Guardian is **LLM-based** - it injects a review prompt after code edits, and Claude analyzes the code. These are the patterns Claude is asked to look for:
-
-### Silent Errors
-```python
-# Detected: .get() with default that masks missing data
-value = data.get("key", "default")
-
-# Suggested fix:
-value = data.get("key")
-if value is None:
-    raise ValueError("Missing required field: key")
-```
-
-### Magic Numbers
-```python
-# Detected: Hardcoded number in function
-window = prices[-20:]
-
-# Suggested fix:
-LOOKBACK_WINDOW = 20  # Periods for rolling calculation
-window = prices[-LOOKBACK_WINDOW:]
-```
-
-### Missing Validation
-```python
-# Detected: Nested access without null check
-item = response["data"]["items"][0]
-
-# Suggested fix:
-data = response.get("data", {}).get("items", [])
-if not data:
-    raise ValueError("Invalid response structure")
-item = data[0]
-```
-
-## Project Structure
+## Development
 
 ```
-your-project/
-├── .sentinel/
-│   ├── rules/
-│   │   ├── project.md          # Project-specific rules
-│   │   └── session.md          # Session rules (gitignored)
-│   ├── checkpoints/
-│   │   └── <group>/
-│   │       ├── CHECKPOINT.md   # Current checkpoint
-│   │       └── history/        # Version history
-│   └── snapshots/              # Context snapshots (gitignored)
-│       └── history/            # Previous snapshots
-├── .claude/
-│   └── settings.json           # Hook configuration
-└── .mcp.json                   # MCP server registration
+uv sync
+uv run pytest                      # the automated tests: real git repositories, the hook's real entry point
+uv run python tests/behaviour/run.py <repo> "<prompt>"   # one turn of a real Claude Code session, with what Sentinel did
 ```
-
-## Background
-
-Sentinel was created based on lessons learned from extensive AI-assisted development across trading ML pipelines, robotics systems, and mobile applications. It addresses the critical pitfalls identified in ["The Double-Edged Sword: AI Coding Agents in ML System Development"](https://chimeralabs.tech/blog/ai-coding-agents-double-edged-sword).
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
