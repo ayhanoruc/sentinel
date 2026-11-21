@@ -7,7 +7,7 @@ and hand-offs. It runs on Claude Code today, and this document names Claude Code
 own events, settings and files; the README's "Other harnesses" lists the five pieces an adapter for another one
 supplies.
 
-Status: built 21 Nov 2026 and moved to `main`; the version before it is kept on branch `v1`. Test record: [TESTING.md](TESTING.md). Build log: [PROGRESS.md](PROGRESS.md).
+Status: built 21 Nov 2026 and moved to `main`; the version before it is kept on branch `v1`. Test record: [TESTING.md](TESTING.md).
 
 ## 1. Principles
 
