@@ -283,6 +283,15 @@ Two things to decide when you activate it:
 - **Run it again after changing `compact_at_percent`**, because that value lives in the harness's settings.
   `sentinel doctor` tells you when the two do not agree.
 
+## The panel in the editor
+
+`extensions/vscode/` holds a small read-only panel for Cursor and VS Code. It sits in the right side bar and shows,
+for every session of the workspace, what the agent wrote for you: its progress notes, its contracts with their status
+and the words they were approved on, its commit reviews, and the repository's assumption ledger and hand-off briefs,
+each part collapsible and refreshed as the agents write. A session whose contract waits for your answer is marked, so
+you see which agent waits for you without going through the conversations. Its README says how to build and install
+it.
+
 ## Settings
 
 One file, `.sentinel/config.toml`, written by `sentinel init` with every value and the reason for it. A file of the

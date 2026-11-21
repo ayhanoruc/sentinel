@@ -130,6 +130,23 @@ def test_a_flagged_line_that_went_and_came_back_is_asked_again(w):
     assert "F1 [open] numeric-literal" in denied(w.bash("git add -A && git commit -m x"))
 
 
+def test_two_commits_without_a_task_are_two_changes_and_answers_do_not_carry_over(w):
+    """Seen in real use: work done outside a task was taken for "the same task" (none and none), and the answers of
+    one change stood for an unrelated one."""
+    w.activate("[tasks]\ngate = false\n")
+    w.start()
+    w.edit("src/a.py", "def a():\n    return load()\n")
+    assert "7 question(s) open" in denied(w.bash("git add -A && git commit -m one"))
+    for q in range(1, 8):
+        w.cli("review", "answer", str(q), f"about the first change {q}")
+    assert denied(w.bash("git add -A && git commit -m one")) == ""
+    w.git("add", "-A")
+    w.git("commit", "-q", "-m", "one")
+    w.edit("src/b.py", "def b():\n    return save()\n")
+    later = denied(w.bash("git add -A && git commit -m two"))
+    assert "7 question(s) open" in later and "about the first change" not in later
+
+
 def test_the_next_commit_is_a_new_change_and_is_asked_its_own_questions(w):
     """Seen in review: after a review had passed, a later commit of the same file with no flagged line got no
     questions, and one new flagged line opened a review whose six answers were blank again."""

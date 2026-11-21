@@ -201,7 +201,8 @@ def prepare(ctx, repo: Path, files: list[str]) -> dict | None:
     else:
         r = {"id": f"R{len(past) + 1}", "repo": str(repo), "task": tid, "depth": depth, "findings": {},
              "answers": {}, "nq": len(_questions(ctx)), "passed": False, "t": sysutil.now()}
-        if last and last.get("task") == tid:          # the same task: its answers stand; the last question is asked of
+        if last and tid is not None and last.get("task") == tid:   # the same task: its answers stand (work outside a
+            # task is never "the same task": two commits without one are two unrelated changes); the last question is asked of
             r["answers"] = {k: v for k, v in last["answers"].items() if same_change or int(k) < r["nq"]}     # every change
     settled = last["findings"] if same_change else {}
     r["files"], r["depth"], r["head"] = files, depth, head

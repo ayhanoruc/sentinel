@@ -1,0 +1,117 @@
+{
+  "name": "sentinel-panel",
+  "displayName": "Sentinel",
+  "description": "What the agents of this workspace wrote for you: progress notes, contracts, reviews, the assumption ledger. Read-only, refreshed as they write.",
+  "version": "0.1.0",
+  "publisher": "sentinel-local",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ayhanoruc/sentinel.git"
+  },
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:.sentinel/config.toml"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "sentinel",
+          "title": "Sentinel",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sentinel": [
+        {
+          "type": "webview",
+          "id": "sentinel.panel",
+          "name": "Sessions",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sentinel.refresh",
+        "title": "Refresh",
+        "category": "Sentinel",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sentinel.showAll",
+        "title": "Show All Sessions",
+        "category": "Sentinel",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "sentinel.showRecent",
+        "title": "Show Recent Sessions Only",
+        "category": "Sentinel",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "sentinel.focus",
+        "title": "Open the Panel",
+        "category": "Sentinel"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sentinel.showAll",
+          "when": "view == sentinel.panel && !sentinel.showAll",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sentinel.showRecent",
+          "when": "view == sentinel.panel && sentinel.showAll",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sentinel.refresh",
+          "when": "view == sentinel.panel",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Sentinel",
+      "properties": {
+        "sentinel.recentHours": {
+          "type": "number",
+          "default": 24,
+          "minimum": 1,
+          "description": "A session that is not running is shown when it was active within this many hours and wrote something for you."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "tsc -p tsconfig.test.json && node --test out/test/model.test.js",
+    "package": "npm run typecheck && npm run build && vsce package --no-dependencies --out sentinel-panel.vsix"
+  },
+  "dependencies": {
+    "markdown-it": "14.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.1.2",
+    "@types/node": "20.17.10",
+    "@types/vscode": "1.94.0",
+    "@vscode/vsce": "3.2.1",
+    "esbuild": "0.24.2",
+    "typescript": "5.7.2"
+  }
+}
