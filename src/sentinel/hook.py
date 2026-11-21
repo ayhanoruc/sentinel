@@ -67,10 +67,10 @@ def _facts(ctx, out) -> None:
         elif ctx.tool in core.SHELL_TOOLS and ctx.tin.get("run_in_background"):
             s.log("bash_bg", what=str(ctx.tin.get("description") or ctx.command())[:200])
     elif name == "PreToolUse" and ctx.tool in core.SHELL_TOOLS:
-        from .modules.gate import is_plain_sentinel
+        from .modules.gate import is_agent_command
 
         cmd = ctx.command()
-        if is_plain_sentinel(cmd):          # our own command, with nothing chained to it: no prompt, and its session set
+        if is_agent_command(cmd):           # the agent's own command, with nothing chained to it: no prompt, and its session set
             prefix = f"$env:SENTINEL_SESSION='{ctx.sid}'; " if ctx.tool == "PowerShell" else f"SENTINEL_SESSION={ctx.sid} "
             out.allow({**ctx.tin, "command": prefix + cmd.strip()})
 

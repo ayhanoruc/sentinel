@@ -1,7 +1,7 @@
 [project]
 name = "sentinel-ai"
 version = "2.0.0"
-description = "A discipline layer for Claude Code sessions: the right message at the right moment, exact checks in code, state in files"
+description = "A discipline layer for agentic coding harnesses (Claude Code today): the right message at the right moment, exact checks in code, state in files"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"

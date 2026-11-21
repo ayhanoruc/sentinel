@@ -56,10 +56,12 @@ def detectors(cfg: dict) -> list[tuple[str, str, re.Pattern, str]]:
     return [(n, where, re.compile(rx), why) for n, where, rx, why in table]
 
 
-def _key(kind: str, file: str, text: str) -> str:
-    """A flagged line's identity across reviews: its kind, its file and its text (not its line number, which moves)."""
+def _key(kind: str, file: str, text: str, nth: int = 1) -> str:
+    """A flagged line's identity within one change: its kind, its file, its text, and which occurrence of that text it
+    is among the lines the change adds. Not its line number, which moves; but a second `except Exception:` in the same
+    file is a second line to answer for."""
     flat = re.sub(r"\s+", " ", text).strip()
-    return hashlib.sha1(f"{kind}|{file}|{flat}".encode("utf-8")).hexdigest()[:10]
+    return hashlib.sha1(f"{kind}|{file}|{flat}{'' if nth == 1 else f'|{nth}'}".encode("utf-8")).hexdigest()[:10]
 
 
 def scan(cfg: dict, repo: Path, files: list[str]) -> dict[str, dict]:
@@ -71,6 +73,13 @@ def scan(cfg: dict, repo: Path, files: list[str]) -> dict[str, dict]:
     for file, lines in gitutil.added_lines(repo, files).items():
         is_test = testing.is_test(file, cfg)
         seen_numbers: set[str] = set()
+        times: dict[tuple[str, str], int] = {}
+
+        def key(kind: str, text: str) -> str:
+            flat = re.sub(r"\s+", " ", text).strip()
+            times[kind, flat] = times.get((kind, flat), 0) + 1
+            return _key(kind, file, text, times[kind, flat])
+
         for n, raw in lines:
             text = raw.strip()
             if not text:
@@ -84,7 +93,7 @@ def scan(cfg: dict, repo: Path, files: list[str]) -> dict[str, dict]:
                     continue
                 if rx.search(text):
                     flagged = True
-                    found.setdefault(_key(kind, file, text), {"kind": kind, "file": file, "line": n, "text": text[:TEXT_MAX], "why": why})
+                    found[key(kind, text)] = {"kind": kind, "file": file, "line": n, "text": text[:TEXT_MAX], "why": why}
             # numbers: one finding for a line, and only when no other detector already asks about that line
             if "numeric-literal" not in off and not is_test and not comment and not flagged:
                 new = []
@@ -94,9 +103,9 @@ def scan(cfg: dict, repo: Path, files: list[str]) -> dict[str, dict]:
                         seen_numbers.add(lit)
                         new.append(lit)
                 if new:
-                    found.setdefault(_key("numeric-literal", file, text), {
+                    found[key("numeric-literal", text)] = {
                         "kind": "numeric-literal", "file": file, "line": n, "text": text[:TEXT_MAX],
-                        "why": f"the number{'s' if len(new) > 1 else ''} {', '.join(new)}: {'values' if len(new) > 1 else 'a value'} someone chose"})
+                        "why": f"the number{'s' if len(new) > 1 else ''} {', '.join(new)}: {'values' if len(new) > 1 else 'a value'} someone chose"}
         if is_test and file.endswith(".py") and "test-without-assert" not in off:
             for f in _tests_without_assert(repo / file, {n for n, _ in lines}):
                 found.setdefault(_key("test-without-assert", file, f["text"]), {**f, "file": file})
@@ -168,32 +177,44 @@ def _open(r: dict) -> tuple[list[dict], list[int]]:
 
 
 def prepare(ctx, repo: Path, files: list[str]) -> dict | None:
-    """The review that covers this change now: the current one brought up to date, or a new one. None when there is
-    nothing to review, or when the last passed review already covers every flagged line and file."""
+    """The review that covers this change now: the open one brought up to date, or a new one. None when there is
+    nothing to review, or when the last passed review already covers every flagged line and file.
+
+    What was settled carries over only inside one change: the same task, and `HEAD` where it was when the last review
+    passed (so its commit did not land). Then only what is new is asked. Once the commit has landed, or the task is
+    another, the next commit is a new change: its flagged lines are new decisions and its questions are asked again.
+    """
     task = ctx.session.current_task() or (list(ctx.session.tasks().values()) or [None])[-1]
+    tid = task["id"] if task else None
     depth = "lines" if task and task["size"] in ("trivial",) else "full"
     found = scan(ctx.cfg, repo, files)
     past = _reviews(ctx)
     last = past[-1] if past else None
+    head = gitutil.head(repo)
     if not files or (depth == "lines" and not found):
         return None
-    if last and last["passed"] and set(found) <= set(last["findings"]) and set(files) <= set(last["files"]):
+    same_change = bool(last) and last["passed"] and last.get("task") == tid and last.get("head") == head
+    if same_change and set(found) <= set(last["findings"]) and set(files) <= set(last["files"]):
         return None
-    known = {k: f for r in past for k, f in r["findings"].items() if f.get("disp") in ("kept", "fixed")}
     if last and not last["passed"]:
         r = last
     else:
-        r = {"id": f"R{len(past) + 1}", "repo": str(repo), "task": task["id"] if task else None, "depth": depth,
-             "findings": {}, "answers": {}, "nq": len(_questions(ctx)), "passed": False, "t": sysutil.now()}
-    r["files"], r["depth"] = files, depth
-    for k, f in list(r["findings"].items()):
+        r = {"id": f"R{len(past) + 1}", "repo": str(repo), "task": tid, "depth": depth, "findings": {},
+             "answers": dict(last["answers"]) if same_change else {}, "nq": len(_questions(ctx)), "passed": False,
+             "t": sysutil.now()}
+    settled = last["findings"] if same_change else {}
+    r["files"], r["depth"], r["head"] = files, depth, head
+    for k, f in r["findings"].items():
         if k not in found and not f.get("disp"):
             f.update(disp="gone", reason="the line is no longer in the change")
+        elif k in found and f.get("disp") == "gone":
+            f.update(disp=None, reason="", line=found[k]["line"])          # it is back in the change: open again
     for k, f in found.items():
         if k not in r["findings"]:
-            n = len(r["findings"]) + 1
-            prior = known.get(k, {})
-            r["findings"][k] = {**f, "n": n, "disp": prior.get("disp"), "reason": prior.get("reason", "")}
+            prior = settled.get(k, {})
+            carried = prior.get("disp") in ("kept", "fixed")
+            r["findings"][k] = {**f, "n": len(r["findings"]) + 1, "disp": prior["disp"] if carried else None,
+                                "reason": prior.get("reason", "") if carried else ""}
     _save(ctx, r)
     return r
 

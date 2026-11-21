@@ -10,10 +10,11 @@ the model actually does with the messages it gets. The second kind changed the d
   clock (`SENTINEL_NOW`) and boot time (`SENTINEL_BOOT_TIME`). Hook events go into `sentinel.hook.run`, the function
   the `sentinel-hook` command calls; the agent's commands go into `sentinel.cli.main`. Every call prints one line, so a
   failing test shows the whole exchange that led to it.
-- **State:** 152 tests, about 45 seconds on the owner's Windows PC. All pass on Python 3.11, 3.12 and 3.14.
+- **State:** 192 tests, about 65 seconds on the owner's Windows PC. All pass on Python 3.11, 3.12 and 3.14.
 
 | File | What it covers |
 |---|---|
+| (in all four files below) | one test for each of the twelve findings of the independent review (section 3), and one that takes the example flow out of the README and runs it as written |
 | `test_core.py` | no config → no output and nothing written; the rules at start and the reminder each 300k tokens; a flow that is off drops its line; no reminder for a subagent; `learn`/`unlearn`, targets and scopes; text override order (repo, user, package); a plain `sentinel` command is allowed and gets its session, a chained or substituted one is not; `CLAUDE_ENV_FILE`; the CLI finds the only running session and refuses to guess between two; a private module; `init` keeps other hooks and is idempotent, `uninstall` takes only ours; a config that does not parse is an error |
 | `test_tasks_and_gate.py` | the edit gate (no task, contract pending, approved, done); the approval rule (not in the turn the contract was opened, only on the person's own later words, standing instruction recorded as such, the standing path can be closed); trivial tasks and steps; what the gate leaves alone; contract sections that are switched off; lenses; the tests moment once per task; the progress reminder and its clock; 40 irreversible commands that must be held and 26 ordinary ones that must pass; the acknowledgement passes once and only for the same command; a repo's own pattern |
 | `test_review_and_board.py` | a commit held until every flagged line and question is settled; each detector; a change after the review asks only about what is new; trivial depth; docs and data not reviewed; the test-run fact; test-file flags; a repo's own detector; how a `git commit` command is read (`-a`, `-am`, `--only`, path lists, `cd X &&`, `git -C`); a commit that would take another session's files is held, `--only` passes; `-a` counts unstaged files of others; claims warn other sessions and end with the session; the board's states; HEAD moved by someone else is told once |
@@ -66,7 +67,32 @@ Five things the automated tests had not shown, each found by watching a real mod
 4. A parallel tool call missing from the cleaned history (row 5) → replies are rebuilt by `message.id`.
 5. The shared-checkout guard passed twice (row 6): `git add` in the same command, then the heredoc message → both read now.
 
-## 3. Not tested
+## 3. An independent review of the code
+
+When the first eight behavioural scenarios were done, a reviewer with none of the build's context read the code at
+`fef06d3` and tried to break it. It confirmed each finding by experiment on a scratch copy. There were twelve
+findings. All were real, all are fixed, and each has a test that fails without the fix.
+
+| # | What it found | What changed |
+|---|---|---|
+| 1 | A new binary file was read as text: one 300 kB image put 133 "numeric literal" lines into a review | a file with a NUL in its first 8000 bytes is not read |
+| 2 | Every shell command parsed the whole log of every session ever registered on the machine (300 old sessions: 4 seconds a call) | whether a session runs is read from the end of its log; the boot time is asked once in a process |
+| 3 | The person's words were read only since the last compaction, so after one compaction an unattended run could approve nothing | the whole session is read; what a compaction's summary quotes is not the person |
+| 4 | `sentinel` followed by a second line, or an apostrophe that hid a `$(…)`, counted as a plain command and ran without a prompt | the command is read quote by quote, as a shell reads it |
+| 5 | `sentinel init . --hook-command '<anything>'` was allowed without a prompt, and it sets the command the harness runs at every event | the setup commands are never allowed without the person's permission |
+| 6 | Words of a commit message were read as paths (`-m "fix parser; add tests"`), so the commit counted as naming its own files and another session's file went in | the command's words are read quote by quote; an operator inside a message is message |
+| 7 | git prints a file name with non-ASCII letters quoted and escaped; such a file of another session was not seen by the guard, and one's own was not reviewed | names are taken unquoted (`-z`) |
+| 8 | Common destructive forms were not held: `rm build -rf`, `rm build -Recurse -Force`, `Remove-Item build -r -fo`, `git checkout -f`, `git switch -f`, `git push origin +main`, `find . -delete` | the patterns cover them, and `rm file -Force` (one file) is no longer held |
+| 9 | After `cd scratch && rm -rf build` was acknowledged, `cd precious && rm -rf build` passed | an acknowledgement includes the shell's folder and every `cd` in the command |
+| 10 | A second flagged line with the same text in the same file went in unasked; a line marked as gone never opened again | a line is also known by which occurrence it is; what was settled carries over only inside one change |
+| 11 | After a passed review, the next commit of the same file got no questions, and one new flagged line opened a review with all six answers blank | the next commit is a new change with its own questions; inside one change the answers stand |
+| 12 | A cut session that was never resumed was announced again after every boot | the mark stands by its place in the log and counts at every later boot |
+
+The reviewer also named what it found sound: every file compiles on Python 3.11; the chain and stretch selection ran
+correctly on five real transcripts (130 MB to 1.1 GB); the `/c/…` path handling, the edit gate, the "a message after
+the contract was opened" check and the hook's error path hold.
+
+## 4. Not tested
 
 - macOS: the boot-time reading (`sysctl kern.boottime`), hook speed, the PowerShell-free path. The code paths exist;
   nothing was run on the Mac.

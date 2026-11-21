@@ -163,7 +163,30 @@ def test_a_new_session_is_told_once_about_other_sessions_that_were_cut(w):
     assert "Other sessions in this repository were cut" in text and "aaaaaaaa" in text and "migrate the data" in text
     assert "This session was cut" not in text
     assert "Other sessions" not in ctx_of(w.start("cccccccc-3333"))            # told once
-    assert "This session was cut" not in ctx_of(w.start(A, source="resume"))  # and A was announced: it has its files
+    text = ctx_of(w.start(A, source="resume"))                                # A itself still gets its own report: it
+    assert "This session was cut" in text and "migrate the data" in text      # does not know what the restart stopped
+    assert "This session was cut" not in ctx_of(w.start(A, source="resume"))  # once
+
+
+def test_a_cut_session_that_is_never_resumed_is_announced_once_not_after_every_boot(w):
+    """Seen in review: the mark that it was announced was looked for after the last boot only, so every restart of
+    the machine announced the same old session again."""
+    w.start(A)
+    w.cli("task", "open", "migrate the data", "--size", "trivial", sid=A)
+    w.tick(600)
+    w.mp.setenv("SENTINEL_BOOT_TIME", str(w.clock))                            # the first restart cuts A
+    w.tick(300)
+    assert "aaaaaaaa" in ctx_of(w.start(B))
+    w.hook("SessionEnd", B, reason="other")
+    for sid in ("cccccccc-3333", "dddddddd-4444"):                             # two more restarts, A never resumed
+        w.tick(86_400)
+        w.mp.setenv("SENTINEL_BOOT_TIME", str(w.clock))
+        w.tick(300)
+        assert "Other sessions" not in ctx_of(w.start(sid)), sid
+        w.hook("SessionEnd", sid, reason="other")
+    text = ctx_of(w.start(A, source="resume"))                                 # resumed at last: its own report, once
+    assert "This session was cut" in text
+    assert "This session was cut" not in ctx_of(w.start(A, source="resume"))
 
 
 # ------------------------------------------------------------------------------------------------- hand-off

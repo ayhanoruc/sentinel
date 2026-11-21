@@ -1,8 +1,11 @@
 # Sentinel v2: specification
 
-Sentinel is a discipline layer for Claude Code sessions. It does not make the agent smarter; it makes sure the right
-message reaches the agent at the moment it applies, checks with code what code can check exactly, and keeps the
-session's working state in files that survive compaction, restarts and hand-offs.
+Sentinel is a discipline layer for agentic coding harnesses (Claude Code, OpenHands and programs like them). It does
+not make the agent smarter; it makes sure the right message reaches the agent at the moment it applies, checks with
+code what code can check exactly, and keeps the session's working state in files that survive compaction, restarts
+and hand-offs. It runs on Claude Code today, and this document names Claude Code wherever it describes that harness's
+own events, settings and files; the README's "Other harnesses" lists the five pieces an adapter for another one
+supplies.
 
 Status: built on branch `v2` (21 Nov 2026). Test record: [TESTING.md](TESTING.md). Build log: [PROGRESS.md](PROGRESS.md).
 
@@ -45,8 +48,12 @@ agent ──Bash/PowerShell: `sentinel <command>`──▶ sentinel CLI ──�
   one line. A user can add private modules in `~/.sentinel/modules/*.py` (same interface).
 - **The session's identity** reaches the CLI as `SENTINEL_SESSION`: the `SessionStart` hook writes it to
   `CLAUDE_ENV_FILE`, and for a plain `sentinel …` command the `PreToolUse` hook also puts it into the command and
-  allows the call without a permission prompt. A plain command is one with no shell operator in it, so
-  `sentinel x && something` is never auto-allowed.
+  allows the call without a permission prompt. A plain command is one command with nothing chained to it or
+  substituted into it, read as a shell reads it, quote by quote: outside quotes no operator, expansion or line break;
+  inside double quotes no `$`, backtick or backslash; a quote left open is not plain. So `sentinel x && something`
+  is never auto-allowed. Neither are the commands that set Sentinel up (`init`, `uninstall`, `doctor`,
+  `transcript`): `init` decides which command the harness runs for every event, so it stays behind the person's own
+  permission.
 - **Subagents:** gates (task, irreversible command, commit) apply to every call. Moments that manage the main
   conversation (park, restore, progress, rules reminder) are not sent to subagents (events that carry `agent_id`).
 - **Failure:** a hook error never blocks the session. It is written to `~/.sentinel/errors.log`, printed on stderr,
@@ -134,7 +141,8 @@ Each flow lists its switch in `config.toml`.
 - **A standing instruction** (`standing = true`): when the person said beforehand not to wait for them, the agent
   approves with `--standing "<those words>"`. The words must be in what they wrote; the task is recorded as "approved
   on a standing instruction, the contract not confirmed by the person", and the agent is told to put the contract in
-  its final message. `standing = false` closes this path: the agent always waits.
+  its final message. `standing = false` closes this path: the agent always waits. The person's words are read from
+  the whole session, across its compactions; a compaction's summary quotes the person and is not counted as them.
 - **World model** (`world_model = true`): the contract's World model section holds expected outcomes as checkable
   statements. Lenses help the agent think it through from the right seat: `sentinel lens` lists them (UI, algorithm,
   data, API, operations, agent-facing text; one file each, more can be added). The review (5.4) compares what was
@@ -164,7 +172,14 @@ Each flow lists its switch in `config.toml`.
   handled, the fragile-pattern catalogue (`sentinel catalogue`: one list for how the work was done, one for the code),
   usual practice, proof. The review also states a fact: whether a test command ran after the last source edit.
 - **The gate (exact):** the commit passes when every flagged line has a disposition and every question an answer.
-  If the code changed after the review, only new flagged lines need a disposition.
+- **One change, one review:** a flagged line is known by its kind, its file, its text and which occurrence of that
+  text it is among the added lines, so a second `except Exception:` in a file is a second line to answer for. What was
+  settled carries over only inside one change: the same task, with `HEAD` where it was when the last review passed
+  (its commit did not land). Then only new flagged lines are asked, and the answers stand. Once the commit has landed,
+  or the task is another, the next commit is a new change: its flagged lines are new decisions and its questions are
+  asked again. A line that left the change and came back is open again.
+- **What is read:** added lines of text files. A new binary file (a NUL in its first 8000 bytes, git's own test) is
+  not read. File names are taken from git unquoted (`-z`), so names with non-ASCII letters or spaces are seen.
 - **The ledger:** when a review passes, every line that was kept goes to `.sentinel/assumptions.md` with its reason,
   file, date and task. The message also tells the agent to say these to the person.
 - **Limits:** the person's own commits in a terminal are not seen. A `git commit` inside quoted text can hold a
@@ -180,14 +195,19 @@ Each flow lists its switch in `config.toml`.
 
 ### 5.6 Check before an irreversible command — `[gate]`
 
-- **When:** a shell command matches a pattern in the table: recursive delete, `git reset --hard`, `git clean`,
-  force-push, branch delete, discard of changes, `docker … down -v` / volume or system prune, SQL `DROP`/`TRUNCATE`/
+- **When:** a shell command matches a pattern in the table: recursive delete (the flag before or after the target;
+  `rm`, `Remove-Item` and its aliases, `-Recurse` in its abbreviations, `rd /s`), bulk delete (`find … -delete`,
+  `find … -exec rm`, `xargs rm`), `git reset --hard`, `git clean`, force-push (also `+branch`), branch delete, discard
+  of changes (also `checkout -f`, `switch -f`), `docker … down -v` / volume or system prune, SQL `DROP`/`TRUNCATE`/
   `DELETE` without `WHERE`, `pg_restore --clean`, ACL or ownership changes (`icacls`, `chmod -R`, `chown -R`),
   kill by name, disk tools, cloud deletes. A project can add patterns or switch one off.
 - **The gate (exact):** the command is denied once with a token. The agent looks at the target, names the way back, and
   runs `sentinel gate ok <token> --target "<what it saw>" --rollback "<how to undo, or why none>"`. The same command
-  then passes once. A changed command needs a new acknowledgement. Each acknowledgement is kept in the session's
-  events.
+  then passes once. Each acknowledgement is kept in the session's events, with the command as it was last held.
+- **What an acknowledgement covers:** the parts of the command that match a pattern, and the place they run in (the
+  shell's folder and every `cd` in the command). A harmless command chained around them may change without a new
+  acknowledgement (a real run showed the model does that between its two attempts); another target, another folder
+  or another `cd` is another act.
 - **Limit:** a pattern table is a tripwire, not a sandbox; it complements Claude Code's own permission modes.
 
 ### 5.7 Progress file — `[progress]`
@@ -208,7 +228,12 @@ Each flow lists its switch in `config.toml`.
   `sentinel release <resource>`. A shell command that names a resource another live session claimed gets a warning
   with that session's note.
 - **Commit guard (exact):** a `git commit` that would include files another live session edited and this session did
-  not is denied with the list, unless the command limits itself with `--only` or a path list.
+  not is denied with the list, unless the command limits itself with `--only` or a path list. What the commit would
+  take is what is staged, what `-a` adds, and what a `git add` earlier in the same command stages (the index does not
+  hold those yet when the hook looks). The command's words are read quote by quote: a `;` or `&&` inside the message
+  is message, and nothing after a command substitution or a heredoc mark is read as a flag or a path.
+- **Cost:** whether a session runs is asked of every session on the machine at every shell command, so it is read
+  from the end of each session's log; only the running ones are read whole.
 - **HEAD moved:** at each prompt, when the repo's `HEAD` differs from what this session last saw and this session did
   not move it, the agent is told the range.
 
@@ -255,9 +280,13 @@ Each flow lists its switch in `config.toml`.
 
 - **Exact:** a session whose events do not end with `session_end` and whose last event is older than the machine's
   last boot was cut by a restart.
-- When such a session is resumed, or a new session starts in the repo, the agent is told once: which session was cut
-  and when, its open tasks, the background tasks that were running at its last turn end, its last progress note, and
-  where its notes are.
+- When such a session is resumed, the agent is told once: when it was cut, its open tasks, the background tasks that
+  were running at its last turn end, its last progress note, and where its notes are. When a new session starts in
+  the repo, it is told once which sessions were cut.
+- **Once means once:** the mark that a cut was told stands in the session's log after its last activity and counts at
+  every later boot, so an old session that is never resumed is not announced again after each restart. A session
+  that was announced to another one still gets its own report when it is resumed: it is the one that needs to know
+  what the restart stopped.
 
 ### 5.11 Hand-off brief — `[handoff]`
 

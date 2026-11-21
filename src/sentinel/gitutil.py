@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
 from . import sysutil
 
 GIT_TIMEOUT_S = 30          # a read-only git call on a large repo answers well inside this; past it the hook gives up on git
+BINARY_PROBE = 8000         # bytes looked at for a NUL to tell a binary file: the size git's own check uses
 
-# `git [-C dir] [-c k=v] commit …` up to the next shell operator
-_COMMIT = re.compile(r"""\bgit\b((?:\s+-[cC]\s+(?:"[^"]*"|'[^']*'|\S+))*)\s+commit\b([^\n]*?)(?=&&|\|\||;|\||\n|$)""")
+# `git [-C dir] [-c k=v] commit`: the words after it are read by `_words`
+_COMMIT = re.compile(r"""\bgit\b((?:\s+-[cC]\s+(?:"[^"]*"|'[^']*'|\S+))*)\s+commit\b""")
 _CD = re.compile(r"""(?:^|[;&|\n]\s*)(?:cd|Set-Location|pushd)\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))""")
 _DASH_C = re.compile(r"""-C\s+(?:"([^"]*)"|'([^']*)'|(\S+))""")
 # git verbs after which HEAD may point somewhere else
@@ -20,9 +20,9 @@ HEAD_MOVERS = re.compile(r"\bgit\b[^\n|;&]*\b(commit|merge|pull|checkout|switch|
 
 
 def git(cwd: Path, *args: str) -> tuple[int, str]:
-    try:
-        r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=GIT_TIMEOUT_S)
+    try:                                         # quotepath off: a name with non-ASCII letters is printed as it is
+        r = subprocess.run(["git", "-c", "core.quotepath=false", "-C", str(cwd), *args], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT_S)
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, str(exc)
     return r.returncode, r.stdout
@@ -46,9 +46,10 @@ def branch(repo: Path) -> str:
     return out.strip() if code == 0 else "?"
 
 
-def _names(repo: Path, *args: str) -> list[str]:
-    code, out = git(repo, *args)
-    return [ln.strip() for ln in out.splitlines() if ln.strip()] if code == 0 else []
+def _names(repo: Path, verb: str, *args: str) -> list[str]:
+    """File names from a git listing, exactly as they are: `-z` gives them unquoted, whatever characters they hold."""
+    code, out = git(repo, verb, "-z", *args)
+    return [name for name in out.split("\0") if name] if code == 0 else []
 
 
 def staged(repo: Path) -> list[str]:
@@ -96,11 +97,48 @@ def added_lines(repo: Path, files: list[str]) -> dict[str, list[tuple[int, str]]
         p = repo / f
         if p.is_file():
             try:
-                text = p.read_text(encoding="utf-8", errors="replace")
+                raw = p.read_bytes()
             except OSError:
                 continue
-            out[f] = list(enumerate(text.splitlines(), 1))
+            if b"\0" in raw[:BINARY_PROBE]:
+                continue                               # an image, an archive: nothing in it is a line someone wrote
+            out[f] = list(enumerate(raw.decode("utf-8", errors="replace").splitlines(), 1))
     return out
+
+
+def _words(text: str) -> tuple[list[str], bool]:
+    """The words of one command, read quote by quote up to the first operator outside quotes; and whether the reading
+    stopped at a command substitution or a heredoc, after which the text is what the shell builds and cannot be read.
+    A `;` or `&&` inside a quoted message is part of the message, not the end of the command."""
+    words: list[str] = []
+    cur: list[str] = []
+    quote, begun, i = "", False, 0
+    while i < len(text):
+        ch, nxt = text[i], text[i + 1:i + 2]
+        if (ch == "$" and nxt == "(" and quote != "'") or (ch == "`" and quote != "'") or (ch == "<" and nxt == "<" and not quote):
+            return words, True
+        if quote:
+            if ch == quote:
+                quote = ""
+            elif ch == "\\" and quote == '"' and nxt in ('"', "\\", "$", "`"):
+                cur.append(nxt)
+                i += 1
+            else:
+                cur.append(ch)
+        elif ch in "'\"":
+            quote, begun = ch, True
+        elif ch in ";|&\n":
+            break
+        elif ch.isspace():
+            if cur or begun:
+                words.append("".join(cur))
+            cur, begun = [], False
+        else:
+            cur.append(ch)
+        i += 1
+    if cur or begun:
+        words.append("".join(cur))
+    return words, False
 
 
 def commit_command(command: str, cwd: Path) -> dict | None:
@@ -127,13 +165,9 @@ def commit_command(command: str, cwd: Path) -> dict | None:
         repo = toplevel(cand)
         if repo:
             break
-    # Claude Code writes the message as -m "$(cat <<'EOF' … EOF)": the first line then ends inside an open quote. What
-    # follows a command substitution or a heredoc mark is message text, never a flag or a path of the commit.
-    args = re.split(r"\"?\$\(|<<", m.group(2), maxsplit=1)[0]
-    try:
-        tokens = shlex.split(args, posix=True)
-    except ValueError:
-        tokens = args.split()
+    # Claude Code writes the message as -m "$(cat <<'EOF' … EOF)". What follows a command substitution or a heredoc
+    # mark is message text, never a flag or a path of the commit: the words are read up to there.
+    tokens, _ = _words(command[m.end():])
     takes_value = {"-m", "-F", "-C", "-c", "--message", "--file", "--author", "--date", "--fixup", "--squash",
                    "--reuse-message", "--reedit-message", "--cleanup", "-t", "--template"}
     all_, limited, i = False, False, 0
@@ -159,7 +193,7 @@ def commit_command(command: str, cwd: Path) -> dict | None:
     return {"repo": repo, "all": all_, "limited": limited, "adds": _adds(command[: m.start()])}
 
 
-_ADD = re.compile(r"""\bgit\b(?:\s+-[cC]\s+(?:"[^"]*"|'[^']*'|\S+))*\s+add\b([^\n]*?)(?=&&|\|\||;|\||\n|$)""")
+_ADD = re.compile(r"""\bgit\b(?:\s+-[cC]\s+(?:"[^"]*"|'[^']*'|\S+))*\s+add\b""")
 
 
 def _adds(before: str) -> str | list[str] | None:
@@ -170,10 +204,9 @@ def _adds(before: str) -> str | list[str] | None:
     found = False
     for m in _ADD.finditer(before):
         found = True
-        try:
-            tokens = shlex.split(m.group(1), posix=True)
-        except ValueError:
-            tokens = m.group(1).split()
+        tokens, cut = _words(before[m.end():])
+        if cut:
+            return "all"                               # paths the shell builds: counted as everything, never as less
         named = [t for t in tokens if not t.startswith("-")]
         if not named or any(t in ("-A", "--all", "-u", "--update") for t in tokens) or any(t in (".", "./", "*") for t in named):
             return "all"

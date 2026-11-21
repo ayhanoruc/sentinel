@@ -15,11 +15,20 @@ def now() -> float:
     return float(fixed) if fixed else time.time()
 
 
+_BOOT: list[float | None] = []          # the platform's answer, asked once in a process
+
+
 def boot_time() -> float | None:
     """When this machine last started, or None when the platform does not say. `SENTINEL_BOOT_TIME` fixes it."""
     fixed = os.environ.get("SENTINEL_BOOT_TIME")
     if fixed:
         return float(fixed)
+    if not _BOOT:
+        _BOOT.append(_platform_boot_time())
+    return _BOOT[0]
+
+
+def _platform_boot_time() -> float | None:
     try:
         if sys.platform == "win32":
             import ctypes

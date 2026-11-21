@@ -7,15 +7,21 @@ from .. import core, sysutil
 SECTION = "crash"
 
 
-def _cut(s: core.Session, boot: float) -> dict | None:
-    """The last thing a session did before the boot, when the boot cut it and nobody has been told yet."""
-    before = [e for e in s.events() if e["t"] < boot]
-    after = [e for e in s.events() if e["t"] >= boot]
-    if not before or before[-1]["e"] == "session_end":
+TOLD = ("crash_reported", "crash_announced")
+
+
+def _cut(s: core.Session, boot: float, told: tuple[str, ...] = TOLD) -> dict | None:
+    """The last thing a session did before the boot, when the boot cut it and it has not been told yet. A cut is told
+    once: the mark written when it was told stands after that last activity in the log, and counts at every later
+    boot too (by position, not by clock). `told` names the marks that count: the session itself is told its own
+    report even when another session was already told about it."""
+    events = s.events()
+    done = [i for i, e in enumerate(events) if e["t"] < boot and e["e"] not in TOLD]
+    if not done or events[done[-1]]["e"] == "session_end":
         return None
-    if any(e["e"] in ("crash_reported", "crash_announced") for e in after):
+    if any(e["e"] in told for e in events[done[-1] + 1:]):
         return None
-    return before[-1]
+    return events[done[-1]]
 
 
 def _background(s: core.Session, boot: float) -> list[str]:
@@ -35,7 +41,7 @@ def on_session_start(ctx, out) -> None:
     if boot is None or ctx.event.get("source") not in ("startup", "resume"):
         return
     me = ctx.session
-    last = _cut(me, boot)
+    last = _cut(me, boot, ("crash_reported",))
     if last is not None:
         open_tasks = [t for t in me.tasks().values() if t["status"] != "done"]
         bg = _background(me, boot)
@@ -54,7 +60,7 @@ def on_session_start(ctx, out) -> None:
             continue
         other = core.Session(ctx.root, folder.name)
         cut = _cut(other, boot)
-        if cut is None or any(e["t"] >= boot for e in other.events()):
+        if cut is None or any(e["t"] >= boot and e["e"] not in TOLD for e in other.events()):
             continue
         open_tasks = [t for t in other.tasks().values() if t["status"] != "done"]
         lines.append(f"- session {folder.name} (last activity {sysutil.day(cut['t'])} {sysutil.clock(cut['t'])}): "

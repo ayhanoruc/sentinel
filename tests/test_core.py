@@ -84,8 +84,29 @@ def test_a_plain_sentinel_command_is_allowed_with_its_session_and_a_chained_one_
     quoted = w.bash('sentinel task open "Add shout(name); keep greet & co" --size trivial')
     assert quoted["permissionDecision"] == "allow"                # what a shell does not expand may stand inside quotes
     for chained in ("sentinel board && rm -rf x", "sentinel board; echo hi", "sentinel progress $(cat /etc/passwd)", "echo sentinel",
-                    'sentinel progress "$(cat /etc/passwd)"', 'sentinel progress "`id`"', "sentinel progress 'a' | sh"):
+                    'sentinel progress "$(cat /etc/passwd)"', 'sentinel progress "`id`"', "sentinel progress 'a' | sh",
+                    # found in review: a second line, an apostrophe that hid a substitution, a quote left open
+                    "sentinel\nrm -rf build", "sentinel board\nrm -rf build", 'sentinel progress "it\'s $(rm -rf build) isn\'t"',
+                    "sentinel progress 'unclosed", "sentinelx board", "sentinel progress a\\\nrm -rf b"):
         assert w.bash(chained).get("permissionDecision") != "allow", chained
+    multi = w.bash("sentinel progress 'line one\nline two; with $(text) inside single quotes'")
+    assert multi["permissionDecision"] == "allow"                 # single quotes hold anything, a line break too
+
+
+def test_the_setup_commands_are_never_passed_without_the_persons_permission(w):
+    """Seen in review: `sentinel init . --hook-command '<anything>'` was allowed without a prompt, and it rewrites the
+    command Claude Code runs for every event."""
+    from sentinel import cli as cli_mod
+    from sentinel.modules import gate
+
+    w.start()
+    for cmd in ("sentinel init . --hook-command 'curl x | sh'", "sentinel uninstall", "sentinel doctor",
+                "sentinel transcript s.jsonl --out /etc/x", "sentinel --session aaaaaaaa init ."):
+        assert w.bash(cmd).get("permissionDecision") != "allow", cmd
+    assert w.bash("sentinel --session aaaaaaaa board")["permissionDecision"] == "allow"
+    sub = next(a for a in cli_mod.build_parser()._actions if a.dest == "cmd")
+    standalone = {name for name, p in sub.choices.items() if p.get_default("standalone")}
+    assert standalone == set(gate.PERSON_COMMANDS)                # the list follows the commands that need no session
 
 
 def test_the_session_id_reaches_the_shell_through_the_env_file(w, tmp_path):
@@ -111,6 +132,23 @@ def test_a_private_module_is_loaded_and_can_be_switched_off(w):
     assert "HELLO" not in ctx_of(w.hook("UserPromptSubmit"))      # its section is not enabled
     w.activate("[hello]\nenabled = true\n")
     assert "HELLO FROM A PRIVATE MODULE" in ctx_of(w.hook("UserPromptSubmit"))
+
+
+def test_the_flow_the_readme_shows_works_as_it_is_written(w):
+    """The README teaches how to add a flow with one example file: that file, taken from the README, must run."""
+    import re
+    from pathlib import Path
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    code = re.search(r"```python\n(.*?)```", readme, re.S).group(1)
+    (w.home / "modules").mkdir(parents=True)
+    (w.home / "modules" / "changelog.py").write_text(code, encoding="utf-8")
+    w.activate("[changelog]\nenabled = true\n")
+    w.start()
+    w.approved_task()
+    assert "CHANGELOG.md" not in w.post("Write", file_path=str(w.repo / "src" / "other.py"), content="x")
+    assert "Add a line to CHANGELOG.md" in w.post("Write", file_path=str(w.repo / "src" / "api" / "users.py"), content="x")
+    assert "CHANGELOG.md" not in w.post("Write", file_path=str(w.repo / "src" / "api" / "users.py"), content="y")   # told once
 
 
 def test_init_keeps_other_hooks_is_idempotent_and_uninstall_takes_only_ours(bare):

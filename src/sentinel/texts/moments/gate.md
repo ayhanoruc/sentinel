@@ -7,4 +7,4 @@ Before it runs:
 4. Then record it and run the same command again:
    sentinel gate ok {token} --target "<what you looked at and saw>" --rollback "<how to undo it, or why there is no way back>"
 
-The acknowledgement is for exactly this destructive command, once. What you chain around it may change; the command itself may not.
+The acknowledgement is for exactly this destructive command in this folder, once. What you chain around it may change; the command itself, the folder and any `cd` before it may not.

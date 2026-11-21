@@ -1,6 +1,7 @@
 """The review before a commit with its ledger, how a `git commit` command is read, and the session board's guards."""
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -90,6 +91,65 @@ def test_a_change_after_the_review_asks_only_about_what_is_new(w):
     assert "1 flagged line(s) open" in again and "question(s) open" not in again
     w.edit("src/a.py", "x = cfg.get('a', 'b')\n")                             # the new line is taken out again
     assert denied(w.bash("git commit -m wip")) == ""                          # it is gone, nothing is open
+
+
+BLOCK = "def {name}():\n    try:\n        run()\n    except Exception:\n        raise\n"
+
+
+def test_a_second_line_with_the_same_text_is_a_second_line_to_answer_for(w):
+    """Seen in review: a flagged line was known by its kind, file and text, so once `except Exception:` had been kept,
+    another one elsewhere in the file went into a commit unasked."""
+    w.start()
+    w.approved_task(size="trivial")
+    w.edit("src/a.py", BLOCK.format(name="a"))
+    reason = denied(w.bash("git add -A && git commit -m one"))
+    assert reason.count("broad-except") == 1
+    w.cli("review", "set", "F1", "kept", "re-raised at once")
+    assert denied(w.bash("git add -A && git commit -m one")) == ""             # passed (the commit does not land here)
+    w.edit("src/a.py", BLOCK.format(name="a") + "\n\n" + BLOCK.format(name="b"))
+    again = denied(w.bash("git add -A && git commit -m one"))
+    assert "1 flagged line(s) open" in again and "kept: re-raised at once" in again    # the first keeps its answer
+    w.cli("review", "set", "F2", "kept", "the same pattern")
+    assert denied(w.bash("git add -A && git commit -m one")) == ""
+    w.git("add", "-A")
+    w.git("commit", "-q", "-m", "one")                                         # now it lands
+    w.edit("src/a.py", BLOCK.format(name="a") + "\n\n" + BLOCK.format(name="b") + "\n\n" + BLOCK.format(name="c"))
+    later = denied(w.bash("git add -A && git commit -m two"))
+    assert "1 flagged line(s) open" in later and "kept:" not in later          # a new change: its line is a new decision
+
+
+def test_a_flagged_line_that_went_and_came_back_is_asked_again(w):
+    """Seen in review: a line marked as gone by a look in between two commit attempts never opened again."""
+    w.start()
+    normal_task(w)
+    w.edit("src/a.py", "LIMIT = 500\n")
+    assert "F1 [open] numeric-literal" in denied(w.bash("git add -A && git commit -m x"))
+    w.edit("src/a.py", "LIMIT = load()\n")
+    assert "F1" not in w.cli("review")[1]                                      # the look in between: the line is not there
+    w.edit("src/a.py", "LIMIT = 500\n")
+    assert "F1 [open] numeric-literal" in denied(w.bash("git add -A && git commit -m x"))
+
+
+def test_the_next_commit_is_a_new_change_and_is_asked_its_own_questions(w):
+    """Seen in review: after a review had passed, a later commit of the same file with no flagged line got no
+    questions, and one new flagged line opened a review whose six answers were blank again."""
+    w.start()
+    normal_task(w)
+    w.edit("src/a.py", "def a():\n    return load()\n")
+    assert "6 question(s) open" in denied(w.bash("git add -A && git commit -m one"))
+    for q in range(1, 7):
+        w.cli("review", "answer", str(q), f"answer {q}")
+    assert denied(w.bash("git add -A && git commit -m one")) == ""             # passed; say the commit itself failed
+    w.edit("src/a.py", "def a():\n    return load()\n\n\nLIMIT = 500\n")
+    same = denied(w.bash("git add -A && git commit -m one"))                   # the same change, one line more
+    assert "R2" in same and "1 flagged line(s) open" in same and "question(s) open" not in same and "answer 3" in same
+    w.cli("review", "set", "F1", "kept", "the page size of the API")
+    assert denied(w.bash("git add -A && git commit -m one")) == ""
+    w.git("add", "-A")
+    w.git("commit", "-q", "-m", "one")                                         # it lands
+    w.edit("src/a.py", "def a():\n    return load()\n\n\nLIMIT = 500\n\n\ndef b():\n    return save()\n")
+    later = denied(w.bash("git add -A && git commit -m two"))
+    assert "R3" in later and "6 question(s) open" in later and "flagged line(s) open" not in later
 
 
 def test_a_trivial_task_is_asked_only_about_flagged_lines_and_clean_code_passes(w):
@@ -240,6 +300,99 @@ def test_commit_all_also_counts_unstaged_files_of_others(w):
     w.git("add", "src/mine.py")
     assert denied(w.bash("git commit -m mine", sid=A)) == ""                  # only A's file is staged
     assert "src/shared.py" in denied(w.bash("git commit -am mine", sid=A))    # -a would sweep B's edit in
+
+
+@pytest.mark.parametrize("message", ['"fix parser; add tests"', '"fix && go"', '"first line\nsecond line"', "'a | b'",
+                                     '"a \\" quote; still the message"', '""'])
+def test_a_commit_message_is_never_read_as_paths(w, message):
+    """Seen in review: `-m "fix parser; add tests"` was cut at the `;`, `parser` was taken for a path, and the commit
+    counted as naming its own files."""
+    info = gitutil.commit_command(f"git commit -m {message}", w.repo)
+    assert (info["all"], info["limited"]) == (False, False), info
+    info = gitutil.commit_command(f"git commit -m {message} -- src/a.py && git push", w.repo)
+    assert info["limited"] is True                       # the path after the message is still read
+
+
+def test_a_message_with_an_operator_in_it_does_not_let_another_sessions_file_through(w):
+    w.activate("[review]\nenabled = false\n")
+    w.start(A)
+    w.start(B)
+    w.approved_task(A)
+    w.approved_task(B)
+    w.edit("src/mine.py", "a = 1\n", sid=A)
+    w.edit("src/theirs.py", "b = 1\n", sid=B)
+    w.git("add", "-A")
+    for cmd in ('git commit -m "fix parser; add tests"', 'git commit -m "one\ntwo"', "git commit -m 'mine && theirs'"):
+        assert "src/theirs.py" in denied(w.bash(cmd, sid=A)), cmd
+
+
+def test_a_file_name_with_non_ascii_letters_is_seen_by_the_guard(w):
+    """Seen in review: git prints such a name quoted and escaped unless told not to, and the name then matched nothing."""
+    w.activate("[review]\nenabled = false\n")
+    w.start(A)
+    w.start(B)
+    w.approved_task(A)
+    w.approved_task(B)
+    w.edit("src/mine.py", "a = 1\n", sid=A)
+    w.edit("src/çalışma notu.py", "b = 1\n", sid=B)
+    assert {"src/mine.py", "src/çalışma notu.py"} <= set(gitutil.changed_vs_head(w.repo))
+    w.git("add", "-A")
+    assert {"src/mine.py", "src/çalışma notu.py"} <= set(gitutil.staged(w.repo))
+    assert "src/çalışma notu.py" in denied(w.bash("git commit -m mine", sid=A))
+
+
+def test_a_file_name_with_non_ascii_letters_is_reviewed(w):
+    w.start()
+    w.approved_task()
+    w.write("src/türkçe.py", "x = 1\n")
+    w.git("add", "-A")
+    w.git("commit", "-q", "-m", "base")
+    w.edit("src/türkçe.py", "import time\nx = 1\ntime.sleep(5)\n")           # a tracked file: its added lines come from the diff
+    w.edit("src/yeni öğe.py", "import time\ntime.sleep(7)\n")                # a new file: read whole
+    w.git("add", "-A")
+    reason = denied(w.bash("git commit -m x"))
+    assert "held for review" in reason and "src/türkçe.py:3" in reason and "src/yeni öğe.py:2" in reason
+
+
+def test_a_new_binary_file_is_not_read_for_flagged_lines(w):
+    """Seen in review: one new 300 kB image put 133 `numeric-literal` lines into the review."""
+    w.start()
+    w.approved_task()
+    image = w.repo / "src" / "logo.bin"
+    image.parent.mkdir(exist_ok=True)
+    image.write_bytes(bytes(range(256)) * 20 + b"\ntimeout = 30\nretries = 7\n" * 40)
+    w.post("Write", file_path=str(image), content="")
+    w.edit("src/app.py", "x = compute()\n")
+    assert set(gitutil.added_lines(w.repo, ["src/logo.bin", "src/app.py"])) == {"src/app.py"}
+    assert denied(w.bash("git add -A && git commit -m x")) == ""
+
+
+def test_whether_a_session_runs_is_read_from_the_end_of_its_log(w):
+    """Seen in review: every shell command parsed the whole log of every session ever registered on the machine
+    (300 old sessions made one call take four seconds). Only the end of a log says whether its session runs."""
+    from sentinel import core
+
+    w.start(A)
+    w.start(B)
+    for i in range(25):
+        old = f"{i:08d}-old"
+        w.start(old)
+        w.hook("SessionEnd", old, reason="other")
+    read: list[str] = []
+    whole = core.Session.events
+    w.mp.setattr(core.Session, "events", lambda self: (read.append(self.sid[:8]), whole(self))[1])
+    w.bash("docker compose up", sid=A)
+    assert read and set(read) <= {"aaaaaaaa", "bbbbbbbb"}                      # only the running ones are read whole
+    w.mp.setattr(core.Session, "events", whole)
+    # a long log: the end still says what the whole would
+    log = w.session_dir(B) / "events.jsonl"
+    with log.open("a", encoding="utf-8") as f:
+        for n in range(600):
+            f.write(json.dumps({"t": w.clock, "e": "progress", "note": f"step {n} " + "x" * 80}) + "\n")
+    cfg = core.Ctx({}, w.repo, A).cfg
+    assert log.stat().st_size > 4 * core.TAIL_BYTES and core.is_live(core.Session(w.repo, B), cfg)
+    w.hook("SessionEnd", B, reason="other")
+    assert not core.is_live(core.Session(w.repo, B), cfg)
 
 
 def test_claims_warn_other_sessions_and_end_with_the_session(w):

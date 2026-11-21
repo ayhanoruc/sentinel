@@ -2,10 +2,12 @@
 command."""
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
 
+from sentinel import gitutil
 from sentinel.modules import gate
 
 
@@ -73,6 +75,29 @@ def test_words_from_before_the_contract_approve_only_as_a_standing_instruction(w
     index = (w.session_dir() / "tasks.md").read_text(encoding="utf-8")
     assert "approved on a standing instruction, the contract not confirmed by the person" in index
     assert denied(w.edit("src/a.py")) == ""
+
+
+def test_words_the_person_said_before_a_compaction_can_still_be_quoted(w):
+    """Seen in review: only the messages since the last compaction were read, so after one compaction an unattended
+    run could approve nothing any more. The summary's own quotes of the person do not count as the person."""
+    import uuid
+
+    w.start()
+    w.say("Bütün işi yap, ben uyuyorum, bana sormadan devam et.")
+    boundary, summary = str(uuid.uuid4()), str(uuid.uuid4())
+    with w.tpath("aaaaaaaa-1111").open("a", encoding="utf-8") as f:            # Claude Code compacts the conversation
+        f.write(json.dumps({"type": "system", "subtype": "compact_boundary", "uuid": boundary, "parentUuid": None,
+                            "logicalParentUuid": w._last["aaaaaaaa-1111"], "isSidechain": False}) + "\n")
+        f.write(json.dumps({"type": "user", "uuid": summary, "parentUuid": boundary, "isCompactSummary": True, "isSidechain": False,
+                            "message": {"role": "user", "content": "Summary: the person said to go on and never to ask anything again."}}) + "\n")
+    w._last["aaaaaaaa-1111"] = summary
+    w.say("devam")
+    w.tick(120)
+    w.cli("task", "open", "the second half", "--size", "normal")
+    fill(w)
+    assert w.cli("task", "approve", "--standing", "never to ask anything again")[0] == 1     # the summary's words, not theirs
+    code, out = w.cli("task", "approve", "--standing", "bana sormadan devam et")
+    assert code == 0 and "standing instruction" in out
 
 
 def test_the_standing_path_can_be_closed(w):
@@ -202,6 +227,10 @@ HELD = [
     "chmod -R 777 .", "chown -R me:me /srv", "taskkill /F /IM python.exe", "pkill node", "Stop-Process -Name node",
     "dd if=/dev/zero of=/dev/sda", "mkfs.ext4 /dev/sdb1", "doctl compute droplet delete 123", "terraform destroy",
     "kubectl delete ns prod", "aws s3 rb s3://bucket --force && aws ec2 terminate-instances --instance-ids i-1",
+    # the flag after the target, PowerShell's aliases and abbreviations, and the forms a review found unheld
+    "rm build -rf", "rm build -Recurse -Force", "Remove-Item build -r -fo", "del build -Recurse", "ri build -Recurse",
+    "rmdir build -Recurse", "git checkout -f", "git switch -f main", "git switch --discard-changes main",
+    "git push origin +main", "find . -name '*.log' -delete", "find . -type f -exec rm {} +", "ls | xargs rm",
 ]
 PASSES = [
     "rm file.txt", "rm -f file.txt", "ls -la", "git status", "git reset HEAD~1", "git push origin main", "git branch -d merged",
@@ -209,6 +238,8 @@ PASSES = [
     "docker compose up -d", 'psql -c "SELECT * FROM users"', 'psql -c "DELETE FROM users WHERE id = 3"', "chmod +x run.sh",
     "icacls key", "taskkill /PID 123 /F", "kill 123", "kubectl get pods", "terraform plan", "echo format", "grep -r rm .",
     "pg_restore -d app dump", "git clean -n",
+    "rm notes.txt -Force", "git checkout -b fix-f", "git switch -c feature", "git push origin feature+1", "find . -name '*.py'",
+    "rmdir empty", "docker run --rm -it image",
 ]
 
 
@@ -230,7 +261,7 @@ def test_an_acknowledged_command_passes_once_and_only_as_it_was(w):
     cmd = "rm -rf build"
     reason = denied(w.bash(cmd))
     token = re.search(r"sentinel gate ok (\w+)", reason).group(1)
-    assert token == gate.token_of(cmd, gate.patterns({"gate": {"disable": [], "patterns": []}}))
+    assert token == gate.token_of(cmd, gate.patterns({"gate": {"disable": [], "patterns": []}}), gitutil.norm(w.repo))
     assert w.cli("gate", "ok", token)[0] == 1                                  # both answers are required
     assert w.cli("gate", "ok", "deadbeef", "--target", "x", "--rollback", "y")[0] == 1
     assert denied(w.bash(cmd)) != ""                                           # still held
@@ -248,9 +279,36 @@ def test_the_acknowledgement_follows_the_destructive_part_not_what_is_chained_ar
     reason = denied(w.bash("rm -rf build && ls -la build"))
     token = re.search(r"sentinel gate ok (\w+)", reason).group(1)
     assert w.cli("gate", "ok", token, "--target", "one generated file", "--rollback", "none: rebuilt by make")[0] == 0
-    assert denied(w.bash("cd . && rm -rf build; git status --short")) == ""       # the same act, other company
+    assert denied(w.bash("rm -rf build; git status --short")) == ""               # the same act, other company
     assert denied(w.bash("rm -rf build && ls -la build")) != ""                   # used: once
     assert token not in denied(w.bash("rm -rf build src && ls"))                  # another target is another act
+
+
+def test_the_acknowledgement_does_not_carry_to_another_place(w):
+    """Seen in review: after `cd scratch && rm -rf build` was acknowledged, `cd precious && rm -rf build` passed."""
+    w.start()
+    reason = denied(w.bash("cd scratch && rm -rf build"))
+    token = re.search(r"sentinel gate ok (\w+)", reason).group(1)
+    assert w.cli("gate", "ok", token, "--target", "scratch/build: generated", "--rollback", "none: rebuilt")[0] == 0
+    other = denied(w.bash("cd precious && rm -rf build"))
+    assert other != "" and token not in other                                     # a `cd` in the command is part of the act
+    elsewhere = w.pre("Bash", command="cd scratch && rm -rf build").get("permissionDecision")
+    assert elsewhere != "deny"                                                    # the acknowledged one passes
+    w.hook("PreToolUse", tool_name="Bash", tool_input={"command": "rm -rf build"}, cwd=str(w.repo))
+    moved = w.hook("PreToolUse", tool_name="Bash", tool_input={"command": "rm -rf build"}, cwd=str(w.tmp))
+    first = w.hook("PreToolUse", tool_name="Bash", tool_input={"command": "rm -rf build"}, cwd=str(w.repo))
+    tokens = [re.search(r"sentinel gate ok (\w+)", a["hookSpecificOutput"]["permissionDecisionReason"]).group(1) for a in (moved, first)]
+    assert tokens[0] != tokens[1]                                                 # so is the folder the shell stands in
+
+
+def test_the_record_of_an_acknowledgement_holds_the_command_as_it_was_last_held(w):
+    w.start()
+    reason = denied(w.bash("rm -rf build && ls"))
+    token = re.search(r"sentinel gate ok (\w+)", reason).group(1)
+    denied(w.bash("rm -rf build && git status"))                                  # the same act, held again with other company
+    w.cli("gate", "ok", token, "--target", "generated files", "--rollback", "none: rebuilt")
+    oks = [json.loads(line) for line in (w.session_dir() / "events.jsonl").read_text(encoding="utf-8").splitlines() if '"gate_ok"' in line]
+    assert oks[-1]["command"] == "rm -rf build && git status"
 
 
 def test_a_repo_can_add_a_pattern_and_switch_one_off(w):

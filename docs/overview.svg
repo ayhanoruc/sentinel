@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1196" width="960" height="1196" font-family="'Segoe UI', system-ui, -apple-system, Helvetica, Arial, sans-serif" role="img" aria-label="One agent session as a line from its start to its hand-off. On the left of the line, what Sentinel tells the agent at each moment; on the right, what it holds until an exact condition is met; below, the files that keep the session's state.">
+<!-- written by docs/diagram.py: change the rows there, not here -->
+<rect width="960" height="1196" rx="14" fill="#F6F7F4" stroke="#DDE1DA"/>
+<text x="36" y="52" font-size="22" font-weight="700" fill="#1C2420">Sentinel around one agent session</text>
+<text x="36" y="78" font-size="12.5" fill="#56615B">The line in the middle is one conversation in an agentic coding harness, from its start to its hand-off.</text>
+<text x="36" y="96" font-size="12.5" fill="#56615B">Left of it: what the agent is told at that moment. Right of it: what waits until an exact condition is met.</text>
+<text x="198" y="136" font-size="11" font-weight="700" letter-spacing="1.2" text-anchor="middle" fill="#2F7D5C">TOLD AT ITS MOMENT</text>
+<text x="480" y="136" font-size="11" font-weight="700" letter-spacing="1.2" text-anchor="middle" fill="#1C2420">THE SESSION</text>
+<text x="761" y="136" font-size="11" font-weight="700" letter-spacing="1.2" text-anchor="middle" fill="#B5561B">HELD UNTIL A CONDITION IS MET</text>
+<line x1="480" y1="148" x2="480" y2="1038" stroke="#1C2420" stroke-width="3" stroke-linecap="round"/>
+<circle cx="480" cy="1038" r="5" fill="#1C2420"/>
+<line x1="361" y1="190" x2="385" y2="190" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="160" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="160" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="182" font-size="13.5" font-weight="600" fill="#1C2420">Standing rules</text>
+<text x="52" y="198" font-size="12" fill="#56615B">How to write to the person and how to work.</text>
+<text x="52" y="212" font-size="12" fill="#56615B">Again every 300k tokens and after a compaction.</text>
+<rect x="385" y="177" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="194" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">session starts</text>
+<line x1="361" y1="264" x2="385" y2="264" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="234" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="234" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="256" font-size="13.5" font-weight="600" fill="#1C2420">Crash report</text>
+<text x="52" y="272" font-size="12" fill="#56615B">What was open and what ran in the background</text>
+<text x="52" y="286" font-size="12" fill="#56615B">when the machine went down.</text>
+<rect x="385" y="251" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="268" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">resumed after a restart</text>
+<line x1="361" y1="338" x2="385" y2="338" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="308" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="308" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="330" font-size="13.5" font-weight="600" fill="#1C2420">World model and lenses</text>
+<text x="52" y="346" font-size="12" fill="#56615B">Expected outcomes as checkable statements;</text>
+<text x="52" y="360" font-size="12" fill="#56615B">lenses for UI, algorithm, data, API, operations.</text>
+<line x1="575" y1="338" x2="599" y2="338" stroke="#B5561B" stroke-width="1.5"/>
+<rect x="599" y="308" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="599" y="308" width="4" height="60" rx="2" fill="#B5561B"/>
+<text x="615" y="330" font-size="13.5" font-weight="600" fill="#1C2420">Task and contract</text>
+<text x="615" y="346" font-size="12" fill="#56615B">The edit waits until a task is open and the person</text>
+<text x="615" y="360" font-size="12" fill="#56615B">approved its contract in their own words.</text>
+<rect x="385" y="325" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="342" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">first edit of a task</text>
+<line x1="361" y1="412" x2="385" y2="412" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="382" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="382" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="404" font-size="13.5" font-weight="600" fill="#1C2420">Tests doctrine</text>
+<text x="52" y="420" font-size="12" fill="#56615B">A test must be able to fail. End to end, printing</text>
+<text x="52" y="434" font-size="12" fill="#56615B">its steps. No test written for its own sake.</text>
+<rect x="385" y="399" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="416" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">first edit of a test file</text>
+<line x1="575" y1="486" x2="599" y2="486" stroke="#B5561B" stroke-width="1.5"/>
+<rect x="599" y="456" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="599" y="456" width="4" height="60" rx="2" fill="#B5561B"/>
+<text x="615" y="478" font-size="13.5" font-weight="600" fill="#1C2420">Irreversible-command check</text>
+<text x="615" y="494" font-size="12" fill="#56615B"><tspan font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" font-size="11.5">rm -rf</tspan>, <tspan font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" font-size="11.5">reset --hard</tspan>, force-push, <tspan font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" font-size="11.5">DROP</tspan>: held</text>
+<text x="615" y="508" font-size="12" fill="#56615B">once. Look at the target, name the way back.</text>
+<rect x="385" y="473" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="490" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">an irreversible command</text>
+<line x1="361" y1="560" x2="385" y2="560" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="530" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="530" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="552" font-size="13.5" font-weight="600" fill="#1C2420">Progress notes</text>
+<text x="52" y="568" font-size="12" fill="#56615B">Every 20 minutes of open work: a note the person</text>
+<text x="52" y="582" font-size="12" fill="#56615B">can read without asking.</text>
+<rect x="385" y="547" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="564" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">long work</text>
+<line x1="361" y1="634" x2="385" y2="634" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="604" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="604" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="626" font-size="13.5" font-weight="600" fill="#1C2420">Learning</text>
+<text x="52" y="642" font-size="12" fill="#56615B">The correction is recorded into the text it belongs</text>
+<text x="52" y="656" font-size="12" fill="#56615B">to and is part of that message from then on.</text>
+<rect x="385" y="621" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="638" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">the person corrects</text>
+<line x1="361" y1="708" x2="385" y2="708" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="678" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="678" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="700" font-size="13.5" font-weight="600" fill="#1C2420">Session board</text>
+<text x="52" y="716" font-size="12" fill="#56615B">Who is doing what on this machine, what each</text>
+<text x="52" y="730" font-size="12" fill="#56615B">claimed, when HEAD was moved by someone else.</text>
+<line x1="575" y1="708" x2="599" y2="708" stroke="#B5561B" stroke-width="1.5"/>
+<rect x="599" y="678" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="599" y="678" width="4" height="60" rx="2" fill="#B5561B"/>
+<text x="615" y="700" font-size="13.5" font-weight="600" fill="#1C2420">Shared-checkout guard</text>
+<text x="615" y="716" font-size="12" fill="#56615B">A commit that would take files another running</text>
+<text x="615" y="730" font-size="12" fill="#56615B">session edited is held.</text>
+<rect x="385" y="695" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="712" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">two sessions, one checkout</text>
+<line x1="575" y1="782" x2="599" y2="782" stroke="#B5561B" stroke-width="1.5"/>
+<rect x="599" y="752" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="599" y="752" width="4" height="60" rx="2" fill="#B5561B"/>
+<text x="615" y="774" font-size="13.5" font-weight="600" fill="#1C2420">Review and assumption ledger</text>
+<text x="615" y="790" font-size="12" fill="#56615B">Numbers, fallbacks, broad excepts, sleeps need a</text>
+<text x="615" y="804" font-size="12" fill="#56615B">disposition; six questions an answer. Kept: ledger.</text>
+<rect x="385" y="769" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="786" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">git commit</text>
+<line x1="361" y1="856" x2="385" y2="856" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="826" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="826" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="848" font-size="13.5" font-weight="600" fill="#1C2420">Notes before the compaction</text>
+<text x="52" y="864" font-size="12" fill="#56615B">Write the notes now: where you are, the exact next</text>
+<text x="52" y="878" font-size="12" fill="#56615B">step, open doubts. Then <tspan font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" font-size="11.5">sentinel park done</tspan>.</text>
+<line x1="575" y1="856" x2="599" y2="856" stroke="#B5561B" stroke-width="1.5"/>
+<rect x="599" y="826" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="599" y="826" width="4" height="60" rx="2" fill="#B5561B"/>
+<text x="615" y="848" font-size="13.5" font-weight="600" fill="#1C2420">Compaction waits for the notes</text>
+<text x="615" y="864" font-size="12" fill="#56615B">The harness compacts by itself at 80 percent; the</text>
+<text x="615" y="878" font-size="12" fill="#56615B">compaction is held until the notes are written.</text>
+<rect x="385" y="843" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="860" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">context 80 % full</text>
+<line x1="361" y1="930" x2="385" y2="930" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="900" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="900" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="922" font-size="13.5" font-weight="600" fill="#1C2420">Restore</text>
+<text x="52" y="938" font-size="12" fill="#56615B">The cleaned history of the compacted stretch, the</text>
+<text x="52" y="952" font-size="12" fill="#56615B">notes, the open tasks and the rules are given back.</text>
+<rect x="385" y="917" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="934" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">after the compaction</text>
+<line x1="361" y1="1004" x2="385" y2="1004" stroke="#2F7D5C" stroke-width="1.5"/>
+<rect x="36" y="974" width="325" height="60" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<rect x="36" y="974" width="4" height="60" rx="2" fill="#2F7D5C"/>
+<text x="52" y="996" font-size="13.5" font-weight="600" fill="#1C2420">Hand-off brief</text>
+<text x="52" y="1012" font-size="12" fill="#56615B">Facts filled in from the session's files; the story</text>
+<text x="52" y="1026" font-size="12" fill="#56615B">written for a reader with none of the context.</text>
+<rect x="385" y="991" width="190" height="26" rx="13" fill="#1C2420"/>
+<text x="480" y="1008" font-size="12" font-weight="600" text-anchor="middle" fill="#FFFFFF">hand-off</text>
+<rect x="36" y="1070" width="888" height="98" rx="8" fill="#FFFFFF" stroke="#DDE1DA"/>
+<text x="52" y="1094" font-size="11" font-weight="700" letter-spacing="1.2" fill="#1C2420">KEPT IN FILES<tspan font-weight="400" letter-spacing="0" fill="#56615B" dx="8">what survives a compaction, a restart and a hand-off</tspan></text>
+<text x="52" y="1115" font-size="11" font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" fill="#1C2420">tasks.md and each task's contract · progress.md · notes.md · history-&lt;n&gt;.md · reviews · events.jsonl</text>
+<text x="52" y="1131" font-size="11" font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" fill="#1C2420">assumptions.md (the ledger) · learned rules · hand-off briefs · the board of every session on the machine</text>
+<text x="52" y="1156" font-size="12" fill="#56615B">The agent answers through one command, <tspan font-family="ui-monospace, 'Cascadia Mono', Consolas, Menlo, monospace" font-size="11.5" fill="#1C2420">sentinel …</tspan>, and each command's output is its next instruction.</text>
+</svg>

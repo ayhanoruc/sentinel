@@ -15,6 +15,8 @@ from . import config as config_mod
 from . import sysutil
 
 PACKAGE_TEXTS = Path(__file__).resolve().parent / "texts"
+TAIL_BYTES = 16_384         # the end of a session's log read to see whether it is running: an event is a few hundred bytes
+TAIL_EVENTS = 20            # how many of its last events that reading gives back
 EDIT_TOOLS = ("Edit", "Write", "NotebookEdit", "MultiEdit")
 SHELL_TOOLS = ("Bash", "PowerShell")
 # a learned rule's target and the text it is appended to
@@ -48,6 +50,7 @@ class Session:
         self.root, self.sid = root, sid
         self.dir = root / ".sentinel" / "sessions" / sid[:8]
         self._events: list[dict] | None = None
+        self._tail: list[dict] | None = None
 
     @property
     def log_path(self) -> Path:
@@ -70,6 +73,8 @@ class Session:
         sysutil.append_line(self.log_path, json.dumps(ev, ensure_ascii=False))
         if self._events is not None:
             self._events.append(ev)
+        if self._tail is not None:
+            self._tail = (self._tail + [ev])[-TAIL_EVENTS:]
         return ev
 
     def all(self, *kinds: str) -> list[dict]:
@@ -128,12 +133,35 @@ class Session:
             state = "waiting" if e.get("ntype") in ("permission_prompt", "elicitation_dialog") else "idle"
         return {"state": state, "since": e["t"]}
 
+    def tail(self) -> list[dict]:
+        """The log's last events, read from its end. Whether a session is running is asked of every session on the
+        machine at every shell command; only the end of each log answers that, so only the end is read."""
+        if self._events is not None:
+            return self._events[-TAIL_EVENTS:]
+        if self._tail is not None:
+            return self._tail
+        try:
+            size = self.log_path.stat().st_size
+            with self.log_path.open("rb") as f:
+                f.seek(max(0, size - TAIL_BYTES))
+                lines = f.read().decode("utf-8", errors="replace").splitlines()
+        except OSError:
+            return []
+        out = []
+        for line in lines[1:] if size > TAIL_BYTES else lines:        # the first line of a cut tail is half a line
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        self._tail = out[-TAIL_EVENTS:]
+        return self._tail
+
     def last_seen(self) -> float | None:
-        ev = self.events()
+        ev = self.tail()
         return ev[-1]["t"] if ev else None
 
     def ended(self) -> bool:
-        ev = [e for e in self.events() if e["e"] not in ("crash_reported", "crash_announced")]
+        ev = [e for e in self.tail() if e["e"] not in ("crash_reported", "crash_announced")]
         return bool(ev) and ev[-1]["e"] == "session_end"
 
 

@@ -196,15 +196,15 @@ def history(path: Path, out: Path, recent_fraction: float, end_offset: int | Non
 
 
 def person_messages(path: Path) -> list[tuple[float | None, str]]:
-    """What the person wrote since the last compaction, oldest first: (when, as seconds since the epoch, or None when
-    the entry carries no time; the text without reminders and command echoes)."""
+    """What the person wrote in this session, oldest first, across its compactions: (when, as seconds since the epoch,
+    or None when the entry carries no time; the text without reminders and command echoes). A compaction's summary
+    quotes the person; it is not the person, and is left out. (Seen in review: an instruction given before a
+    compaction could not be quoted after it.)"""
     from datetime import datetime
 
-    chain = _chain(path, None)
-    bounds = [i for i, (_, boundary, _) in enumerate(chain) if boundary]
     out: list[tuple[float | None, str]] = []
     with path.open("rb") as f:
-        for off, boundary, summary in chain[(bounds[-1] + 1 if bounds else 0):]:
+        for off, boundary, summary in _chain(path, None):
             if boundary or summary:
                 continue
             d = _read(f, off)
