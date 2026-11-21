@@ -71,7 +71,8 @@ def _facts(ctx, out) -> None:
 
         cmd = ctx.command()
         if is_agent_command(cmd):           # the agent's own command, with nothing chained to it: no prompt, and its session set
-            prefix = f"$env:SENTINEL_SESSION='{ctx.sid}'; " if ctx.tool == "PowerShell" else f"SENTINEL_SESSION={ctx.sid} "
+            # set for every command of the call: an agent often writes several `sentinel` commands in one
+            prefix = f"$env:SENTINEL_SESSION='{ctx.sid}'; " if ctx.tool == "PowerShell" else f"export SENTINEL_SESSION={ctx.sid}; "
             out.allow({**ctx.tin, "command": prefix + cmd.strip()})
 
 

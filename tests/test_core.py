@@ -78,11 +78,18 @@ def test_a_plain_sentinel_command_is_allowed_with_its_session_and_a_chained_one_
     w.start()
     a = w.bash('sentinel progress "half way"')
     assert a["permissionDecision"] == "allow"
-    assert a["updatedInput"]["command"].startswith("SENTINEL_SESSION=aaaaaaaa-1111 sentinel progress")
+    assert a["updatedInput"]["command"].startswith("export SENTINEL_SESSION=aaaaaaaa-1111; sentinel progress")
     ps = w.pre("PowerShell", command="sentinel board")
     assert ps["updatedInput"]["command"].startswith("$env:SENTINEL_SESSION='aaaaaaaa-1111'; sentinel board")
     quoted = w.bash('sentinel task open "Add shout(name); keep greet & co" --size trivial')
     assert quoted["permissionDecision"] == "allow"                # what a shell does not expand may stand inside quotes
+    # several sentinel commands in one call are as plain as each of them (a real run: the model wrote its review
+    # answers as ten commands in one call, and the call was not passed)
+    batch = w.bash('sentinel review set F1 kept "a; b (c)"\nsentinel review answer 1 "yes" && sentinel review answer 2 \'no\'; sentinel review status\n')
+    assert batch["permissionDecision"] == "allow" and batch["updatedInput"]["command"].startswith("export SENTINEL_SESSION=aaaaaaaa-1111; sentinel review set")
+    for mixed in ("sentinel board\nsentinel init .", "sentinel board; ls", "sentinel board && sentinel progress x | tee log",
+                  "sentinel board &\nsentinel progress x", "sentinel board || sentinel progress x"):
+        assert w.bash(mixed).get("permissionDecision") != "allow", mixed
     for chained in ("sentinel board && rm -rf x", "sentinel board; echo hi", "sentinel progress $(cat /etc/passwd)", "echo sentinel",
                     'sentinel progress "$(cat /etc/passwd)"', 'sentinel progress "`id`"', "sentinel progress 'a' | sh",
                     # found in review: a second line, an apostrophe that hid a substitution, a quote left open

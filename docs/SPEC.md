@@ -48,10 +48,11 @@ agent ──Bash/PowerShell: `sentinel <command>`──▶ sentinel CLI ──�
   one line. A user can add private modules in `~/.sentinel/modules/*.py` (same interface).
 - **The session's identity** reaches the CLI as `SENTINEL_SESSION`: the `SessionStart` hook writes it to
   `CLAUDE_ENV_FILE`, and for a plain `sentinel …` command the `PreToolUse` hook also puts it into the command and
-  allows the call without a permission prompt. A plain command is one command with nothing chained to it or
-  substituted into it, read as a shell reads it, quote by quote: outside quotes no operator, expansion or line break;
-  inside double quotes no `$`, backtick or backslash; a quote left open is not plain. So `sentinel x && something`
-  is never auto-allowed. Neither are the commands that set Sentinel up (`init`, `uninstall`, `doctor`,
+  allows the call without a permission prompt. A plain call holds only `sentinel` commands: one, or several one
+  after another (a line break, `;` or `&&` between them; an agent writes its review answers as ten commands in one
+  call), with nothing piped, redirected or substituted. It is read as a shell reads it, quote by quote: outside
+  quotes no other operator and no expansion; inside double quotes no `$`, backtick or backslash; a quote left open
+  is not plain. So `sentinel x && something` is never auto-allowed. Neither are the commands that set Sentinel up (`init`, `uninstall`, `doctor`,
   `transcript`): `init` decides which command the harness runs for every event, so it stays behind the person's own
   permission.
 - **Subagents:** gates (task, irreversible command, commit) apply to every call. Moments that manage the main

@@ -55,17 +55,20 @@ the model actually does with the messages it gets. The second kind changed the d
 
 | 9 | Automatic compaction held for the notes. A new repository with `compact_at_percent = 7`, `hold_until_percent = 14` (the haiku alias has a 1M window here, so 7 percent is about 68,600 tokens: what four of the test files reach), no flag on the command line: "Read data/part1.txt … part6.txt, one file per step… tell me the code word in part 3 and how many lines part 6 has" | `sentinel init` had written `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = 7` into the project's settings, and that alone moved Claude Code's trigger: after part 3 its log shows `level=compact` and the `PreCompact` hook fired. Sentinel **blocked it** (hold begun at 63,273 tokens, limit 126,546; the event records `at: 7.0`, so the setting reached the hook). The next tool result carried **the hold message**. Claude Code asked again before each of the next three requests and was blocked each time, with nothing shown; meanwhile the model **read its notes file, wrote it** (what was read, the code word found, the exact next two steps, the open doubt about the line count) and **ran `sentinel park done`**. The next `PreCompact` passed with the summary's instructions, the compaction ran, `SessionStart` (compact) delivered the recovery, and the model read parts 5 and 6 and answered correctly (HERON, 380 lines). 42 seconds, $0.045. Two things to know: after this compaction the model went straight on from the summary without opening the history or the notes (in row 5 it read both); and a first attempt with 30 percent never compacted, because 30 percent of a 1M window is 294,000 tokens, which is how I learned the alias's window. |
 
-All nine scenarios together cost about $0.31 of haiku usage (the sum of the costs Claude Code reported, the 30-percent attempt included).
+| 10 | The whole path once more, after the review's twelve fixes, in a new repository: "Add src/net.py with fetch_with_retry(url)… You do not need to wait for me… When it works, commit it. Then delete the folder build with rm -rf build" | Edit held → task opened → contract written → approved with `--standing` on the person's words → code written and checked against a local server by hand → commit **held for review** (four flagged lines, six questions) → dispositions and answers → commit passed → `rm -rf build` **held**, acknowledged, run. The final message named the four kept lines and four choices the person had not specified. 103 seconds, $0.024. The gate held three more commands on the way, all rightly: a heredoc whose text held `rm -rf build`; a test script with `find src -name __pycache__ -exec rm -rf {} +` chained after it (the model switched to `python -B`, which makes no cache to delete); and an attempt to acknowledge and delete in one command (`sentinel gate ok … ; rm -rf build`), which is not a plain command, so it was held and done in two steps. **Design change:** the model wrote its review answers as several `sentinel` commands in one call, and that call was not passed without a prompt. A call made only of `sentinel` commands is now as plain as each of them. |
+
+All ten scenarios together cost about $0.33 of haiku usage (the sum of the costs Claude Code reported, the 30-percent attempt included).
 
 ### What the real runs changed
 
-Five things the automated tests had not shown, each found by watching a real model and each now covered by a test:
+Six things the automated tests had not shown, each found by watching a real model and each now covered by a test:
 
 1. An approval the model gives itself on the original request (row 1a) → the approval rule.
 2. One ledger entry per number on a line (row 3) → one finding per line.
 3. A second acknowledgement because a harmless chained command changed (row 4) → the token follows the destructive part.
 4. A parallel tool call missing from the cleaned history (row 5) → replies are rebuilt by `message.id`.
 5. The shared-checkout guard passed twice (row 6): `git add` in the same command, then the heredoc message → both read now.
+6. Several `sentinel` commands in one call were not passed without a prompt (row 10) → a call made only of them is plain.
 
 ## 3. An independent review of the code
 

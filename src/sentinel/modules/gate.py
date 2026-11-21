@@ -44,40 +44,59 @@ PERSON_COMMANDS = ("init", "uninstall", "doctor", "transcript")
 _PLACE = re.compile(r"\(?\s*(?:cd|chdir|pushd|popd|Set-Location|sl)\b", re.I)
 
 
-def is_plain_sentinel(command: str) -> bool:
-    """One `sentinel …` command with nothing chained to it or substituted into it. Read as a shell reads it, quote by
-    quote: outside quotes no operator, expansion or line break; inside double quotes no `$`, backtick or backslash;
-    inside single quotes anything. A quote left open is not plain."""
-    command = command.strip()
-    m = _SENTINEL.match(command)
-    if not m:
-        return False
-    quote = ""
-    for ch in command[m.end():]:
-        if quote == "'":
-            quote = "" if ch == "'" else quote
-        elif quote == '"':
-            if ch == '"':
+def sentinel_commands(command: str) -> list[str] | None:
+    """The `sentinel …` commands a shell command consists of, when it consists of nothing else: one command, or
+    several one after another (separated by a line break, `;` or `&&`), with nothing piped, redirected or substituted.
+    None for anything else. Read as a shell reads it, quote by quote: outside quotes no other operator and no
+    expansion; inside double quotes no `$`, backtick or backslash; inside single quotes anything. A quote left open is
+    not a plain command. (An agent writes its review answers as ten commands in one call: seen in a real run.)"""
+    parts: list[str] = []
+    cur: list[str] = []
+    quote, i = "", 0
+    while i < len(command):
+        ch = command[i]
+        if quote:
+            if ch == quote:
                 quote = ""
-            elif ch in _IN_DOUBLE_QUOTES:
-                return False
+            elif quote == '"' and ch in _IN_DOUBLE_QUOTES:
+                return None
+            cur.append(ch)
         elif ch in "'\"":
             quote = ch
+            cur.append(ch)
+        elif ch in "\n;" or command[i:i + 2] == "&&":         # one command ends, the next begins
+            parts.append("".join(cur))
+            cur = []
+            i += 1 if ch == "&" else 0
         elif ch in _OUTSIDE_QUOTES:
-            return False
-    return not quote
+            return None
+        else:
+            cur.append(ch)
+        i += 1
+    if quote:
+        return None
+    parts = [p.strip() for p in [*parts, "".join(cur)] if p.strip()]
+    return parts if parts and all(_SENTINEL.match(p) for p in parts) else None
+
+
+def is_plain_sentinel(command: str) -> bool:
+    """Only `sentinel …` commands, with nothing else chained to them or substituted into them."""
+    return sentinel_commands(command) is not None
 
 
 def is_agent_command(command: str) -> bool:
-    """A plain `sentinel …` command of the kind the agent runs in a session (a task, a note, a review answer), not one
-    that sets Sentinel up or writes to a path the command names."""
-    if not is_plain_sentinel(command):
-        return False
-    words = command.split()[1:]
-    i = 0
-    while i < len(words) and words[i].startswith("-"):        # `--session <id>` stands before the command
-        i += 2 if words[i] == "--session" else 1
-    return i >= len(words) or words[i].strip("'\"") not in PERSON_COMMANDS
+    """Plain `sentinel …` commands of the kind the agent runs in a session (a task, a note, a review answer), none of
+    them one that sets Sentinel up or writes to a path the command names."""
+    for part in sentinel_commands(command) or [""]:
+        words = part.split()[1:]
+        if not part:
+            return False
+        i = 0
+        while i < len(words) and words[i].startswith("-"):        # `--session <id>` stands before the command
+            i += 2 if words[i] == "--session" else 1
+        if i < len(words) and words[i].strip("'\"") in PERSON_COMMANDS:
+            return False
+    return True
 
 
 def patterns(cfg: dict) -> list[tuple[str, re.Pattern, str]]:

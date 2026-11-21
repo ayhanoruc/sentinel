@@ -59,8 +59,9 @@ active the hook exits at once. An error inside the hook never blocks the session
 
 **The command.** The agent answers through `sentinel <command>`, run in its shell: it opens a task, records an
 approval, sets a review answer, writes a progress note. Each command prints what happened and what to do next, so an
-instruction is found at the place it is used. A plain `sentinel` command passes without a permission prompt. One with
-anything chained to it does not, and the commands that set Sentinel up never do.
+instruction is found at the place it is used. A call that holds only `sentinel` commands, one or several, passes
+without a permission prompt. A call with anything else chained, piped or substituted into it does not, and the
+commands that set Sentinel up never do.
 
 **The files.** A session's state is not kept in memory or in a database. Every event is appended to
 `events.jsonl` in the session's folder, and the state is read from that log, so two hooks that run side by side cannot
