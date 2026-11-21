@@ -39,6 +39,13 @@ def _background(event: dict) -> list[str]:
 def _facts(ctx, out) -> None:
     """What happened, recorded whatever flows are on: the modules and the board read the session from this."""
     ev, s, name = ctx.event, ctx.session, ctx.name
+    if name != "SessionStart" and core.registered(ctx.sid) is None:
+        # a session that was already open when Sentinel was activated here never had its start seen: the hooks act
+        # on it all the same, so its commands must find it (seen on the first day of real use)
+        from . import gitutil
+
+        core.register(ctx.sid, ctx.root, transcript=sysutil.native_path(ev.get("transcript_path") or ""),
+                      head_start=gitutil.head(ctx.root))
     if name == "SessionStart":
         from . import gitutil
 

@@ -318,3 +318,15 @@ def test_a_repo_can_add_a_pattern_and_switch_one_off(w):
     assert "deploys to production" in denied(w.bash("./deploy.sh prod"))
     w.activate("[gate]\nenabled = false\n")
     assert denied(w.bash("git reset --hard")) == ""
+
+
+def test_by_default_the_quoted_words_are_recorded_and_not_checked(w):
+    """The owner's decision (21 Nov): the agent records the evidence and approves; no match against the transcript.
+    A message he sent while the agent worked had not been found, and every edit stayed held."""
+    w.activate("[tasks]\nverify_approval = false\n")
+    w.start()
+    w.cli("task", "open", "calendar", "--size", "normal")
+    fill(w)
+    code, out = w.cli("task", "approve", "--basis", "onayliyorum")
+    assert code == 0 and denied(w.edit("src/a.py")) == ""
+    assert "onayliyorum" in (w.session_dir() / "tasks.md").read_text(encoding="utf-8")

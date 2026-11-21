@@ -28,6 +28,8 @@ class World:
         monkeypatch.delenv("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", raising=False)   # as in a session Sentinel did not set up
         monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp / "claude-user"))      # never the real user's Claude Code settings
         monkeypatch.setenv("SENTINEL_BOOT_TIME", "1000")           # the machine booted long before every test clock
+        from sentinel import config
+        monkeypatch.setitem(config.DEFAULTS["tasks"], "verify_approval", True)   # the tests exercise the check; its default is off
         self.clock = 1_800_000_000.0
         self.tick(0)
         self.git("init", "-q", "-b", "main")
@@ -58,6 +60,8 @@ class World:
             dir, local, hook_command = str(self.repo), False, "sentinel-hook"
         code, text = install.init(A)
         assert code == 0, text
+        cfg = self.repo / ".sentinel" / "config.toml"
+        cfg.write_text(cfg.read_text(encoding="utf-8").replace("verify_approval = false", "verify_approval = true"), encoding="utf-8")
         if extra:
             cfg = self.repo / ".sentinel" / "config.toml"
             cfg.write_text(extra, encoding="utf-8")

@@ -139,15 +139,16 @@ def approve(args, ctx) -> tuple[int, str]:
                    "Fill them (write \"None\" where there is truly nothing), present the contract to the person, then approve.")
     events = ctx.session.events()
     opened = next(i for i, e in enumerate(events) if e["e"] == "task_open" and e["id"] == t["id"])
-    if basis and not any(e["e"] == "prompt" for e in events[opened + 1:]):
+    verify = bool(ctx.cfg["tasks"]["verify_approval"])
+    if verify and basis and not any(e["e"] == "prompt" for e in events[opened + 1:]) and not _said(ctx, "", t["opened"] + 2 * CLOCK_SLACK_S):
         return 1, (f"{t['id']} cannot be approved on --basis yet: the person has not written anything since its contract was opened.\n"
                    "Present the contract in the conversation and stop. Approve when they have answered."
                    + ("\nOnly if they told you earlier not to wait for them: --standing \"<their words>\"." if ctx.cfg["tasks"]["standing"] else ""))
-    said = _said(ctx, basis or standing, t["opened"] if basis else None)
+    said = _said(ctx, basis or standing, t["opened"] if basis else None) if verify else True
     if said is False:
         return 1, ("These words are not in what the person wrote" + (" since the contract was opened" if basis else "")
                    + ". Quote their own words exactly; an approval is recorded only on what they said.")
-    ctx.session.log("task_approve", id=t["id"], basis=basis or standing, standing=bool(standing), verified=said is True)
+    ctx.session.log("task_approve", id=t["id"], basis=basis or standing, standing=bool(standing), verified=verify and said is True)
     _index(ctx)
     tail = "" if said else " (The words could not be checked against the conversation: its transcript is not readable from here.)"
     if standing:

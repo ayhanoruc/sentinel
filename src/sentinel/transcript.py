@@ -209,6 +209,10 @@ def person_messages(path: Path) -> list[tuple[float | None, str]]:
                 continue
             d = _read(f, off)
             m = d.get("message") or {}
+            a = d.get("attachment") or {}
+            if d.get("type") == "attachment" and a.get("type") == "queued_command" and a.get("commandMode") != "task-notification":
+                m = {"role": "user", "content": a.get("prompt") or ""}     # a message the person sent while the agent worked
+                d = {**d, "timestamp": d.get("timestamp") or a.get("timestamp")}
             if (m.get("role") or d.get("type")) != "user":
                 continue
             text = _person_text(m.get("content"))

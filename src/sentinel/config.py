@@ -15,6 +15,7 @@ DEFAULTS: dict = {
         "enabled": True,
         "gate": True,
         "standing": True,
+        "verify_approval": False,
         "exempt": [],
         "world_model": True,
         "field_note": True,
@@ -65,6 +66,7 @@ enabled = true
 enabled = true
 gate = true                     # an edit waits for an approved task; false keeps the tracking and drops the gate
 standing = true                 # the agent may approve on your earlier words telling it not to wait (recorded as such); false: it always waits
+verify_approval = false         # false: the words the agent quotes are recorded as the evidence (the owner's decision). true: they must also be found in what you wrote after the contract was opened
 exempt = []                     # globs (repo-relative) that never need a task, e.g. ["notes/**"]
 world_model = true              # the contract holds expected outcomes; lenses: `sentinel lens`
 field_note = true               # the agent may propose a short research note on standards and prior art
