@@ -14,5 +14,5 @@ What to do:
    sentinel review set F<n> fixed
    sentinel review set F<n> kept "<the reason>"
 2. Answer each open question from what you actually did and saw: `sentinel review answer <n> "<answer>"`.
-3. Tell the person in the conversation what you kept and why (these are the assumptions and numbers they should know about), and any risk you see.
+3. Tell the person in the conversation, in their language, what you chose and kept and why (these are the assumptions and numbers they should know about), and any risk you see.
 4. Commit again. The commit passes when no flagged line and no question is open.

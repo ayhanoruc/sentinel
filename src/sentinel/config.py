@@ -28,6 +28,7 @@ DEFAULTS: dict = {
     },
     "review": {
         "enabled": True,
+        "detectors": False,
         "skip": ["*.md", "*.txt", "*.rst", "docs/**", "*.lock", "*.json", "*.yaml", "*.yml", "*.toml", "*.csv",
                  "*.svg", "*.html", "*.css", ".sentinel/**"],
         "disable": [],
@@ -72,9 +73,10 @@ world_model = true              # the contract holds expected outcomes; lenses: 
 field_note = true               # the agent may propose a short research note on standards and prior art
 proof = true                    # the contract says how the work will be shown to work
 
-[review]                        # flagged lines and questions before a commit; kept lines go to .sentinel/assumptions.md
+[review]                        # the questions before a commit; the choices the agent kept go to .sentinel/assumptions.md
 enabled = true
 # skip = ["*.md", "docs/**", ...]   files the review leaves out (default: docs, lock and data files)
+detectors = false               # false: the agent names its own choices (numbers, fallbacks, broad catches) in the review's last question. true: built-in patterns also flag lines, each needing an answer (many on front-end code)
 disable = []                    # detector names to switch off, e.g. ["numeric-literal"]
 # [[review.patterns]]           a detector of your own
 # name = "print-debug"

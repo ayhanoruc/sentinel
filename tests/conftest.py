@@ -30,6 +30,7 @@ class World:
         monkeypatch.setenv("SENTINEL_BOOT_TIME", "1000")           # the machine booted long before every test clock
         from sentinel import config
         monkeypatch.setitem(config.DEFAULTS["tasks"], "verify_approval", True)   # the tests exercise the check; its default is off
+        monkeypatch.setitem(config.DEFAULTS["review"], "detectors", True)        # the same for the built-in detectors
         self.clock = 1_800_000_000.0
         self.tick(0)
         self.git("init", "-q", "-b", "main")
@@ -61,7 +62,7 @@ class World:
         code, text = install.init(A)
         assert code == 0, text
         cfg = self.repo / ".sentinel" / "config.toml"
-        cfg.write_text(cfg.read_text(encoding="utf-8").replace("verify_approval = false", "verify_approval = true"), encoding="utf-8")
+        cfg.write_text(cfg.read_text(encoding="utf-8").replace("verify_approval = false", "verify_approval = true").replace("detectors = false", "detectors = true"), encoding="utf-8")
         if extra:
             cfg = self.repo / ".sentinel" / "config.toml"
             cfg.write_text(extra, encoding="utf-8")

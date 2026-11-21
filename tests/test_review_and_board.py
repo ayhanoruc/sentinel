@@ -55,7 +55,7 @@ def test_a_commit_is_held_until_every_flagged_line_and_question_is_settled(w):
     assert kinds == {"numeric-literal", "default-fallback", "broad-except", "fixed-sleep", "timeout-retry", "truncation", "todo"}, kinds
     assert "the numbers 429, 502, 503" in reason and "the number 37" in reason       # one finding for a line's numbers
     assert reason.count("numeric-literal") == 2                                      # 7, 45, 3 and 50 belong to other findings
-    assert "no test command was seen" in reason and "Questions:" in reason and "6." in reason
+    assert "no test command was seen" in reason and "Questions:" in reason and "7." in reason
 
     code, out = w.cli("review", "set", "F1", "kept")
     assert code == 1 and "reason" in out                                       # a kept line needs its reason
@@ -63,8 +63,8 @@ def test_a_commit_is_held_until_every_flagged_line_and_question_is_settled(w):
     for n in flagged:
         assert w.cli("review", "set", f"F{n}", "kept", f"reason for {n}")[0] == 0
     still = denied(w.bash('git commit -m "add loader"'))
-    assert "6 question(s) open" in still and "flagged line(s) open" not in still
-    for q in range(1, 7):
+    assert "7 question(s) open" in still and "flagged line(s) open" not in still
+    for q in range(1, 8):
         assert w.cli("review", "answer", str(q), f"answer {q}")[0] == 0
     assert w.cli("review", "answer", "9", "x")[0] == 1
     assert denied(w.bash('git commit -m "add loader"')) == ""                 # passes
@@ -82,7 +82,7 @@ def test_a_change_after_the_review_asks_only_about_what_is_new(w):
     reason = denied(w.bash("git commit -am wip"))
     assert "F1 [open] default-fallback" in reason
     w.cli("review", "set", "F1", "kept", "the documented default")
-    for q in range(1, 7):
+    for q in range(1, 8):
         w.cli("review", "answer", str(q), "ok")
     w.edit("src/a.py", "x = cfg.get('a', 'b')\nLIMIT = 500\n")
     w.git("add", "-A")
@@ -136,8 +136,8 @@ def test_the_next_commit_is_a_new_change_and_is_asked_its_own_questions(w):
     w.start()
     normal_task(w)
     w.edit("src/a.py", "def a():\n    return load()\n")
-    assert "6 question(s) open" in denied(w.bash("git add -A && git commit -m one"))
-    for q in range(1, 7):
+    assert "7 question(s) open" in denied(w.bash("git add -A && git commit -m one"))
+    for q in range(1, 8):
         w.cli("review", "answer", str(q), f"answer {q}")
     assert denied(w.bash("git add -A && git commit -m one")) == ""             # passed; say the commit itself failed
     w.edit("src/a.py", "def a():\n    return load()\n\n\nLIMIT = 500\n")
@@ -149,7 +149,7 @@ def test_the_next_commit_is_a_new_change_and_is_asked_its_own_questions(w):
     w.git("commit", "-q", "-m", "one")                                         # it lands
     w.edit("src/a.py", "def a():\n    return load()\n\n\nLIMIT = 500\n\n\ndef b():\n    return save()\n")
     later = denied(w.bash("git add -A && git commit -m two"))
-    assert "R3" in later and "6 question(s) open" in later and "flagged line(s) open" not in later
+    assert "R3" in later and "1 question(s) open" in later and "flagged line(s) open" not in later   # the task's answers stand; its choices are asked of every change
 
 
 def test_a_trivial_task_is_asked_only_about_flagged_lines_and_clean_code_passes(w):

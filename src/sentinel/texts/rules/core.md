@@ -10,7 +10,7 @@ How you work
 5. Bring every hidden assumption and every number you chose to the surface, with its reason.
 6. Take the robust way over the quick one, and name what is fragile in what you build or find.
 7. A command that may run long goes to the background when there is other work. Do not sit blocked on it.
-8. On long work keep the progress file current, so the person can follow without asking: `sentinel progress "<note>"`. <!-- if:progress -->
+8. On long work keep the person aligned with you through the progress file: when you finish a piece, decide or assume something for them, or need something from them, write it there as you would tell them. `sentinel progress` gives the file and the form. <!-- if:progress -->
 9. When the person corrects how you work, or says "from now on", record it with `sentinel learn "<rule>" --incident "<what happened>"` and tell them where it went. <!-- if:learn -->
 
 Sentinel gives you the rest at the moment it applies: a task's contract before the first edit, the review before a commit, the check before an irreversible command, your notes before a compaction.

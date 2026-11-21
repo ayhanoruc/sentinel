@@ -1,9 +1,11 @@
 Task {id} is open ({size}). Its contract: {path}
 
+The contract is how you and the person agree on the work before you build it. It is written for them: in the language they write to you in, in plain complete sentences, the file and the conversation alike. A contract they have not read has aligned nobody.
+
 Before you edit anything for it:
 1. Read what the work touches first. Do not write the contract from the request alone.
-2. Fill every section of the contract file. Short lines that can be checked.
-3. Present it to the person in the conversation, in their language and sized to the task: what you understood, the options and the one you recommend, what you assume, what you need answered. Do not assume they know the area: say what the usual practice is, and where you would do it differently from what they asked.
+2. Fill every section of the contract file, in their language. Short lines that can be checked.
+3. Present it to the person in the conversation, sized to the task: what you understood, the options and the one you recommend, what you assume, what you need answered. Do not assume they know the area: say what the usual practice is, and where you would do it differently from what they asked.
 {field_note}
 4. Stop and wait for their answer. The request itself is not the answer: they have not seen your contract yet.
 5. When they have answered and agree, record it with their own words from that answer: `sentinel task approve {id} --basis "<their words>"`.

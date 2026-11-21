@@ -50,7 +50,7 @@ _NUMBER = re.compile(r"(?<![\w.])-?\d[\d_]*(?:\.\d+)?(?![\w.])")
 
 def detectors(cfg: dict) -> list[tuple[str, str, re.Pattern, str]]:
     off = set(cfg["review"]["disable"])
-    table = [d for d in DETECTORS if d[0] not in off]
+    table = [d for d in DETECTORS if d[0] not in off] if cfg["review"]["detectors"] else []    # a repo's own always apply
     table += [(p["name"], p.get("where", "any"), p["regex"], p.get("why", "matches a pattern this repository added"))
               for p in cfg["review"]["patterns"] if p["name"] not in off]
     return [(n, where, re.compile(rx), why) for n, where, rx, why in table]
@@ -68,7 +68,7 @@ def scan(cfg: dict, repo: Path, files: list[str]) -> dict[str, dict]:
     """The flagged lines among what `files` add over HEAD, by their identity."""
     found: dict[str, dict] = {}
     table = detectors(cfg)
-    off = set(cfg["review"]["disable"])
+    off = set(cfg["review"]["disable"]) | (set() if cfg["review"]["detectors"] else {"numeric-literal", "test-without-assert"})
     ignore = {float(n) for n in cfg["review"]["ignore_numbers"]}
     for file, lines in gitutil.added_lines(repo, files).items():
         is_test = testing.is_test(file, cfg)
@@ -200,10 +200,12 @@ def prepare(ctx, repo: Path, files: list[str]) -> dict | None:
         r = last
     else:
         r = {"id": f"R{len(past) + 1}", "repo": str(repo), "task": tid, "depth": depth, "findings": {},
-             "answers": dict(last["answers"]) if same_change else {}, "nq": len(_questions(ctx)), "passed": False,
-             "t": sysutil.now()}
+             "answers": {}, "nq": len(_questions(ctx)), "passed": False, "t": sysutil.now()}
+        if last and last.get("task") == tid:          # the same task: its answers stand; the last question is asked of
+            r["answers"] = {k: v for k, v in last["answers"].items() if same_change or int(k) < r["nq"]}     # every change
     settled = last["findings"] if same_change else {}
     r["files"], r["depth"], r["head"] = files, depth, head
+    r["nq"] = len(_questions(ctx))                    # the questions as they are now: an open review follows them
     for k, f in r["findings"].items():
         if k not in found and not f.get("disp"):
             f.update(disp="gone", reason="the line is no longer in the change")
@@ -263,6 +265,10 @@ def _pass(ctx, r: dict) -> None:
         if f.get("disp") == "kept" and f"<!-- {k} -->" not in have:
             sysutil.append_line(ledger, f"- **{f['file']}:{f['line']}** `{f['text']}`: {f['reason']} _({f['kind']}, {r['task'] or 'no task'}, "
                                         f"{sysutil.day(sysutil.now())}, session {ctx.sid[:8]})_ <!-- {k} -->")
+    choices = (r["answers"].get(str(r["nq"])) or "").strip() if r["depth"] == "full" else ""
+    if choices and f"<!-- {r['id']} {ctx.sid[:8]} -->" not in have:      # the choices the agent named itself
+        sysutil.append_line(ledger, f"- **{r['task'] or 'no task'}, {', '.join(r['files'][:6])}{' …' if len(r['files']) > 6 else ''}**: "
+                                    f"{choices} _({sysutil.day(sysutil.now())}, session {ctx.sid[:8]})_ <!-- {r['id']} {ctx.sid[:8]} -->")
     ctx.session.log("review_pass", id=r["id"])
 
 

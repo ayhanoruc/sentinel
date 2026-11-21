@@ -4,3 +4,4 @@
 4. Fragile patterns: read `sentinel catalogue`. Which entries apply to this change or to how you worked, and what did you do about each?
 5. Usual practice: where does this differ from how the field usually does it, and why is that right here?
 6. Proof: what exactly shows that this works (the command and what you saw)? For each new test: which breakage would make it fail, and did you see it fail?
+7. Choices: name every number, default, fallback, broad catch, fixed wait and cut-off you chose in this change: where it is and why it is right. Write "none" when there is none. This goes to the ledger, and you tell it to the person.

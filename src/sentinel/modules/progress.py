@@ -12,7 +12,18 @@ def path_of(ctx):
     return ctx.session.dir / "progress.md"
 
 
+def _file(ctx):
+    path = path_of(ctx)
+    if not path.is_file():
+        sysutil.atomic_write(path, f"# Progress of session {ctx.sid[:8]}\n")
+    return path
+
+
 def on_post_tool_use(ctx, out) -> None:
+    edited = ctx.tin.get("file_path") if ctx.tool in ("Edit", "Write", "MultiEdit") else None
+    if edited and ctx.rel(edited) == ctx.rel(path_of(ctx)):
+        ctx.session.log("progress", note="a section written in the progress file")    # the agent wrote its note there
+        return
     every = float(ctx.cfg["progress"]["every_minutes"]) * 60
     if ctx.sub or every <= 0:
         return
@@ -29,17 +40,16 @@ def on_post_tool_use(ctx, out) -> None:
         return                              # not due yet, or asked already in this interval
     ctx.session.log("progress_ask")
     ctx.moment("progress")
-    out.context(ctx.text("moments/progress.md", minutes=int((now - since) / 60)))
+    out.context(ctx.text("moments/progress.md", path=_file(ctx),
+                         lead=f"It has been {int((now - since) / 60)} minutes since the last progress note on this work.\n\n"))
 
 
 def note(args, ctx) -> tuple[int, str]:
-    text = re.sub(r"\s+", " ", args.note).strip()
-    if not text:
-        return 1, "Give the note: what is done, what is running, what comes next, what waits for the person."
-    path, now = path_of(ctx), sysutil.now()
+    text = re.sub(r"\s+", " ", args.note or "").strip()
+    if not text:                            # no note given: where the file is and how a note is written
+        return 0, ctx.text("moments/progress.md", path=_file(ctx), lead="")
+    path, now = _file(ctx), sysutil.now()
     last = ctx.session.last("progress")
-    if not path.is_file():
-        sysutil.atomic_write(path, f"# Progress of session {ctx.sid[:8]}\n")
     if last is None or sysutil.day(last["t"]) != sysutil.day(now):
         sysutil.append_line(path, f"\n## {sysutil.day(now)}")
     task = ctx.session.current_task()
@@ -50,5 +60,5 @@ def note(args, ctx) -> tuple[int, str]:
 
 def cli(sub) -> None:
     p = sub.add_parser("progress", help="add a progress note for the person")
-    p.add_argument("note")
+    p.add_argument("note", nargs="?", default="", help="a one-line note; without it: the file and the form of a full note")
     p.set_defaults(fn=note)
