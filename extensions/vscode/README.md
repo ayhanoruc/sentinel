@@ -1,7 +1,6 @@
 # Sentinel panel
 
-A read-only panel in the editor's right side bar that shows what the agents of this workspace wrote for you, and
-refreshes itself as they write:
+A read-only panel that shows what the agents of this workspace wrote for you, and refreshes itself as they write:
 
 - **every session** in `.sentinel/sessions/`, with its name in the harness, its state (working, idle, waiting for
   you, cut by a restart, ended), when it was last active, and a mark when one of its contracts waits for your answer
@@ -25,8 +24,15 @@ npm run package                                   # writes sentinel-panel.vsix
 cursor --install-extension sentinel-panel.vsix    # or: code --install-extension …
 ```
 
-Then reload the window. The panel opens in the secondary side bar (right) in a workspace whose folder holds
-`.sentinel/config.toml`; `Sentinel: Open the Panel` brings it up.
+Then reload the window, in a workspace whose folder holds `.sentinel/config.toml`. The panel is in two places, the
+same page in both:
+
+- `Sentinel: Open Beside the Editor` opens it as an editor tab beside the current editor. Keep it there or drag it
+  where you want it: it comes back in the same place after a reload. This is the way to keep it open on the right.
+- The shield in the activity bar shows it as a view.
+
+Cursor keeps its right side bar for its own agent and refuses an extension's view there, so the panel is not placed
+in it. In VS Code the activity-bar view can be dragged to the secondary side bar.
 
 ## Develop
 

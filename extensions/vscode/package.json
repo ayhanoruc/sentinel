@@ -2,7 +2,7 @@
   "name": "sentinel-panel",
   "displayName": "Sentinel",
   "description": "What the agents of this workspace wrote for you: progress notes, contracts, reviews, the assumption ledger. Read-only, refreshed as they write.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "sentinel-local",
   "license": "MIT",
   "private": true,
@@ -17,12 +17,13 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:.sentinel/config.toml"
+    "workspaceContains:.sentinel/config.toml",
+    "onWebviewPanel:sentinel.tab"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
-      "secondarySidebar": [
+      "activitybar": [
         {
           "id": "sentinel",
           "title": "Sentinel",
@@ -41,6 +42,12 @@
       ]
     },
     "commands": [
+      {
+        "command": "sentinel.openTab",
+        "title": "Open Beside the Editor",
+        "category": "Sentinel",
+        "icon": "$(split-horizontal)"
+      },
       {
         "command": "sentinel.refresh",
         "title": "Refresh",
@@ -68,6 +75,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "sentinel.openTab",
+          "when": "view == sentinel.panel",
+          "group": "navigation@0"
+        },
+        {
           "command": "sentinel.showAll",
           "when": "view == sentinel.panel && !sentinel.showAll",
           "group": "navigation@1"
@@ -80,6 +92,23 @@
         {
           "command": "sentinel.refresh",
           "when": "view == sentinel.panel",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "sentinel.showAll",
+          "when": "activeWebviewPanelId == 'sentinel.tab' && !sentinel.showAll",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sentinel.showRecent",
+          "when": "activeWebviewPanelId == 'sentinel.tab' && sentinel.showAll",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sentinel.refresh",
+          "when": "activeWebviewPanelId == 'sentinel.tab'",
           "group": "navigation@2"
         }
       ]
